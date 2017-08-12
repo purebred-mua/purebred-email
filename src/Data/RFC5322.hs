@@ -22,11 +22,12 @@ import Data.Semigroup ((<>))
 import Data.Word (Word8)
 
 import Data.Attoparsec.ByteString
+import Data.CaseInsensitive (CI, mk)
 import qualified Data.Map as M
 import qualified Data.ByteString as B
 
 --type Headers = M.Map B.ByteString B.ByteString
-type Headers = [(B.ByteString, B.ByteString)]
+type Headers = [(CI B.ByteString, B.ByteString)]
 
 data RFC5322 a = RFC5322 Headers (Maybe a)
   deriving (Show)
@@ -103,8 +104,11 @@ optionalCFWS = cfws <|> pure []
 isFtext :: Word8 -> Bool
 isFtext c = (c >= 33 && c <= 57) || (c >= 59 && c <= 126)
 
-field :: Parser (B.ByteString, B.ByteString)
-field = (,) <$> takeWhile1 isFtext <* word8 58 {-:-} <*> unstructured <* crlf
+field :: Parser (CI B.ByteString, B.ByteString)
+field = (,)
+  <$> (mk <$> takeWhile1 isFtext)
+  <*  word8 58 {-:-}
+  <*> unstructured <* crlf
 
 unstructured :: Parser B.ByteString
 unstructured =
