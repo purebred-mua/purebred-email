@@ -10,6 +10,9 @@ than RFC 822 or RFC 2822.  If you have to deal with messages that
 comply with the older specifications but not RFC 5322, preprocess
 the input and massage it to be RFC 5322 compliant.
 
+This parser allows LF line endings in addition to CRLF (RFC 5322
+demands CRLF but LF-only is common in on-disk formats).
+
 -}
 
 import Control.Applicative
