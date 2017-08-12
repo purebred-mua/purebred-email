@@ -1,4 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE RankNTypes #-}
 
 module Data.RFC5322
   where
@@ -21,6 +22,7 @@ import Data.Foldable (fold)
 import Data.Semigroup ((<>))
 import Data.Word (Word8)
 
+import Control.Lens
 import Data.Attoparsec.ByteString
 import Data.CaseInsensitive (CI, mk)
 import qualified Data.Map as M
@@ -28,6 +30,9 @@ import qualified Data.ByteString as B
 
 --type Headers = M.Map B.ByteString B.ByteString
 type Headers = [(CI B.ByteString, B.ByteString)]
+
+header :: CI B.ByteString -> Fold Headers B.ByteString
+header k = folded . filtered ((k ==) . fst) . _2
 
 data RFC5322 a = RFC5322 Headers (Maybe a)
   deriving (Show)
