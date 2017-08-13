@@ -24,8 +24,9 @@ import Data.Word (Word8)
 
 import Control.Lens
 import Data.Attoparsec.ByteString
-import Data.CaseInsensitive (CI, mk)
 import qualified Data.ByteString as B
+
+import Data.RFC5322.Internal
 
 type Headers = [(CI B.ByteString, B.ByteString)]
 
@@ -109,7 +110,7 @@ isFtext c = (c >= 33 && c <= 57) || (c >= 59 && c <= 126)
 
 field :: Parser (CI B.ByteString, B.ByteString)
 field = (,)
-  <$> (mk <$> takeWhile1 isFtext)
+  <$> ci (takeWhile1 isFtext)
   <*  word8 58 {-:-}
   <*> unstructured <* crlf
 

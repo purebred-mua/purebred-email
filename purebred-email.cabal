@@ -19,7 +19,8 @@ library
   exposed-modules:
     Data.RFC5322
     , Data.MIME
-  -- other-modules:       
+  other-modules:
+    Data.RFC5322.Internal
   -- other-extensions:    
   build-depends:
     base >= 4.8 && < 4.10
