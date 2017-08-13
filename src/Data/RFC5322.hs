@@ -21,7 +21,7 @@ import Control.Monad (join, void)
 import Data.Word (Word8)
 
 import Control.Lens
-import Data.Attoparsec.ByteString
+import Data.Attoparsec.ByteString as A
 import qualified Data.ByteString as B
 
 import Data.RFC5322.Internal
@@ -73,31 +73,33 @@ wsp = satisfy isWsp
 
 -- §3.2.2.  Folding White Space and Comments
 
-fws :: Parser [Word8]
-fws = optional (many wsp *> crlf) *> many1 wsp *> pure [32 {-SPACE-}]
+fws :: Parser B.ByteString
+fws = optional (A.takeWhile isWsp *> crlf) *> takeWhile1 isWsp *> pure " "
 
 -- | FWS collapsed to a single SPACE character, or empty string
 --
-optionalFWS :: Parser [Word8]
-optionalFWS = fws <|> pure []
+optionalFWS :: Parser B.ByteString
+optionalFWS = fws <|> pure mempty
 
 -- | Printable ASCII excl. '(', ')', '\'
 isCtext :: Word8 -> Bool
 isCtext c = (c >= 33 && c <= 39) || (c >= 42 && c <= 91) || (c >= 93 && c <= 126)
 
-ccontent :: Parser [Word8]
-ccontent = ((:[]) <$> satisfy isCtext) <|> comment
+ccontent :: Parser B.ByteString
+ccontent = (B.singleton <$> satisfy isCtext) <|> comment
 
-comment :: Parser [Word8]
+comment :: Parser B.ByteString
 comment = word8 40 {-(-} *> (foldMany (optionalFWS <<>> ccontent)) <* optionalFWS <* word8 41 {-)-}
 
-cfws :: Parser [Word8]
-cfws = foldMany1 (optionalFWS <<>> comment) <* optionalFWS <|> fws
+cfws :: Parser B.ByteString
+cfws =
+  foldMany1 (optionalFWS <<>> comment) *> optionalFWS *> pure " "
+  <|> fws
 
 -- | CFWS collapsed to a single SPACE character, or empty string
 --
-optionalCFWS :: Parser [Word8]
-optionalCFWS = cfws <|> pure []
+optionalCFWS :: Parser B.ByteString
+optionalCFWS = cfws <|> pure mempty
 
 
 -- §3.2.4.  Quoted Strings
@@ -105,7 +107,7 @@ optionalCFWS = cfws <|> pure []
 quotedString :: Parser B.ByteString
 quotedString =
   optionalCFWS *> dquote
-  *> foldMany (fmap B.pack optionalFWS <<>> qcontent) <<>> fmap B.pack optionalFWS
+  *> foldMany (optionalFWS <<>> qcontent) <<>> optionalFWS
   <* dquote <* optionalCFWS
   where
     qtext c = c == 33 || (c >= 35 && c <= 91) || (c >= 93 && c <= 126)
@@ -128,8 +130,8 @@ field = (,)
 
 unstructured :: Parser B.ByteString
 unstructured =
-  foldMap B.pack <$> many (optionalFWS <<>> ((:[]) <$> vchar))
-  <* many wsp -- FIXME: retain wsp (see https://tools.ietf.org/html/rfc5322#section-3.2.5)
+  foldMany (optionalFWS <<>> (B.singleton <$> vchar))
+  <<>> A.takeWhile isWsp
 
 vchar :: Parser Word8
 vchar = satisfy (\c -> c >= 33 && c <= 126)
