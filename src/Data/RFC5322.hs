@@ -18,8 +18,6 @@ demands CRLF but LF-only is common in on-disk formats).
 
 import Control.Applicative
 import Control.Monad (join, void)
-import Data.Foldable (fold)
-import Data.Semigroup ((<>))
 import Data.Word (Word8)
 
 import Control.Lens
@@ -91,10 +89,10 @@ ccontent :: Parser [Word8]
 ccontent = ((:[]) <$> satisfy isCtext) <|> comment
 
 comment :: Parser [Word8]
-comment = word8 40 {-(-} *> (fold <$> many ((<>) <$> optionalFWS <*> ccontent)) <* optionalFWS <* word8 41 {-)-}
+comment = word8 40 {-(-} *> (foldMany (optionalFWS <<>> ccontent)) <* optionalFWS <* word8 41 {-)-}
 
 cfws :: Parser [Word8]
-cfws = (join <$> many1 ((<>) <$> optionalFWS <*> comment)) <* optionalFWS <|> fws
+cfws = foldMany1 (optionalFWS <<>> comment) <* optionalFWS <|> fws
 
 -- | CFWS collapsed to a single SPACE character, or empty string
 --
@@ -107,15 +105,11 @@ optionalCFWS = cfws <|> pure []
 quotedString :: Parser B.ByteString
 quotedString =
   optionalCFWS *> dquote
-  *> ((<>) <$> foldMany ((<>) <$> fmap B.pack optionalFWS <*> qcontent) <*> fmap B.pack optionalFWS)
+  *> foldMany (fmap B.pack optionalFWS <<>> qcontent) <<>> fmap B.pack optionalFWS
   <* dquote <* optionalCFWS
   where
     qtext c = c == 33 || (c >= 35 && c <= 91) || (c >= 93 && c <= 126)
     qcontent = B.singleton <$> satisfy qtext -- FIXME <|> quoted-pair
-
--- | Parse zero or more values and fold them
-foldMany :: (Monoid m) => Parser m -> Parser m
-foldMany = fmap fold . many
 
 dquote :: Parser Word8
 dquote = word8 34
@@ -134,7 +128,7 @@ field = (,)
 
 unstructured :: Parser B.ByteString
 unstructured =
-  foldMap B.pack <$> many ((<>) <$> optionalFWS <*> ((:[]) <$> vchar))
+  foldMap B.pack <$> many (optionalFWS <<>> ((:[]) <$> vchar))
   <* many wsp -- FIXME: retain wsp (see https://tools.ietf.org/html/rfc5322#section-3.2.5)
 
 vchar :: Parser Word8
