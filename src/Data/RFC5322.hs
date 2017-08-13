@@ -102,6 +102,24 @@ optionalCFWS :: Parser [Word8]
 optionalCFWS = cfws <|> pure []
 
 
+-- §3.2.4.  Quoted Strings
+
+quotedString :: Parser B.ByteString
+quotedString =
+  optionalCFWS *> dquote
+  *> ((<>) <$> foldMany ((<>) <$> fmap B.pack optionalFWS <*> qcontent) <*> fmap B.pack optionalFWS)
+  <* dquote <* optionalCFWS
+  where
+    qtext c = c == 33 || (c >= 35 && c <= 91) || (c >= 93 && c <= 126)
+    qcontent = B.singleton <$> satisfy qtext -- FIXME <|> quoted-pair
+
+-- | Parse zero or more values and fold them
+foldMany :: (Monoid m) => Parser m -> Parser m
+foldMany = fmap fold . many
+
+dquote :: Parser Word8
+dquote = word8 34
+
 -- §3.6.8.  Optional fields
 
 -- | Printable ASCII excl. ':'
