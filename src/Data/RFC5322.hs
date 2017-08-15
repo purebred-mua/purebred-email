@@ -31,10 +31,8 @@ type Headers = [(CI B.ByteString, B.ByteString)]
 header :: CI B.ByteString -> Fold Headers B.ByteString
 header k = folded . filtered ((k ==) . fst) . _2
 
-data RFC5322 a = RFC5322 Headers (Maybe a)
+data RFC5322 a = RFC5322 Headers a
   deriving (Show)
-
-type Body = B.ByteString
 
 
 -- | Either CRLF or LF (lots of mail programs transform CRLF to LF)
@@ -58,12 +56,15 @@ atext = satisfy isAtext
 
 -- §3.5.  Overall Message Syntax
 
-message :: Parser (RFC5322 Body)
-message = RFC5322 <$> fields <*> optional (crlf *> body) <* endOfInput
+-- | Parse a message, given function from headers to body parser
+--
+-- This parser does not handle the legitimate but obscure case
+-- of a message with no body (empty body is fine, though).
+--
+message :: (Headers -> Parser a) -> Parser (RFC5322 a)
+message f = fields >>= \hdrs -> RFC5322 hdrs <$> (crlf *> f hdrs)
 
-body :: Parser B.ByteString
-body = takeByteString
-
+fields :: Parser Headers
 fields = many field
 
 -- | SP or TAB
@@ -125,7 +126,7 @@ isFtext c = (c >= 33 && c <= 57) || (c >= 59 && c <= 126)
 field :: Parser (CI B.ByteString, B.ByteString)
 field = (,)
   <$> ci (takeWhile1 isFtext)
-  <*  word8 58 {-:-}
+  <*  word8 58 {-:-} <* many wsp
   <*> unstructured <* crlf
 
 unstructured :: Parser B.ByteString

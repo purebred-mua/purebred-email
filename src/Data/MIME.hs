@@ -2,7 +2,20 @@
 {-# LANGUAGE RankNTypes #-}
 
 module Data.MIME
-  where
+  (
+  -- * MIME data
+    MIME(..)
+  , mime
+
+  , parsed
+
+  -- * Content-Type header
+  , ContentType(..)
+  , ctType
+  , ctSubtype
+  , ctParameters
+  , contentType
+  ) where
 
 {- |
 
@@ -26,6 +39,7 @@ specially, as part of the 'MIME' data type.
 -}
 
 import Control.Applicative
+import Data.Semigroup ((<>))
 import Data.Word (Word8)
 
 import Control.Lens
@@ -35,9 +49,10 @@ import qualified Data.ByteString as B
 import Data.RFC5322
 import Data.RFC5322.Internal
 
-data Part
-  = Part Headers Body
-  | Multipart [Part]
+data MIME
+  = Part B.ByteString
+  | Multipart [RFC5322 MIME]
+  deriving (Show)
 
 
 data ContentType = ContentType
@@ -49,10 +64,13 @@ data ContentType = ContentType
 ctType :: Lens' ContentType (CI B.ByteString)
 ctType f (ContentType a b c) = fmap (\a' -> ContentType a' b c) (f a)
 
+ctSubtype :: Lens' ContentType (CI B.ByteString)
+ctSubtype f (ContentType a b c) = fmap (\b' -> ContentType a b' c) (f b)
+
 ctParameters :: Lens' ContentType [(CI B.ByteString, B.ByteString)]
 ctParameters f (ContentType a b c) = fmap (\c' -> ContentType a b c') (f c)
 
--- | https:\/\/tools.ietf.org\/html\/rfc2045#section-5.1
+-- | Parser for Content-Type header
 contentType :: Parser ContentType
 contentType = ContentType
   <$> ci token
@@ -69,16 +87,53 @@ parsed :: Parser a -> Fold B.ByteString a
 parsed p = to (parseOnly p) . folded
 
 
-mime :: Parser Part
-mime = message >>= \(RFC5322 hdrs (Just body)) -> do -- FIXME irref pat
-  case preview (header "content-type" . parsed contentType) hdrs of
-    Just ct | view ctType ct == "multipart" ->
-      case preview (ctParameters . header "boundary") ct of
-        Nothing -> pure $ Part hdrs body
-        Just boundary -> multipart boundary
-    _ -> pure $ Part hdrs body
+-- | Top-level MIME body parser that uses headers to decide how to
+--   parse the body.
+--
+-- Do not use this parser for parsing a nested message.
+--
+mime :: Headers -> Parser MIME
+mime = mime' endOfInput
 
+mime'
+  :: Parser end
+  -- ^ Parser for the part delimiter.  If this part is multipart,
+  --   we pass it on to the 'multipart' parser.  If this part is
+  --   not multipart, we slurp the input until the parser matches.
+  -> Headers
+  -> Parser MIME
+mime' end h = case preview (header "content-type" . parsed contentType) h of
+  Just ct | view ctType ct == "multipart" ->
+    case preview (ctParameters . header "boundary") ct of
+      Nothing -> part
+      Just boundary -> Multipart <$> multipart end boundary
+  _ -> part
+  where
+    part = Part . B.pack <$> manyTill anyWord8 end
+
+{-
+
+The multipart parser makes a few opinionated decisions.
+
+- Preamble and epilogue are discarded
+
+- Preamble and epilogue are assumed to be short, therefore
+  the cost of skipping over these is also assumed to be low
+  (until proven otherwise)
+
+-}
 multipart
-  :: B.ByteString  -- ^ boundary, sans leading "--"
-  -> Parser Part
-multipart = undefined
+  :: Parser end    -- ^ parser that indicates where the epilogue ends
+  -> B.ByteString  -- ^ boundary, sans leading "--"
+  -> Parser [RFC5322 MIME]
+multipart end boundary =
+  multipartBody
+  where
+    dashes = string "--"
+    dashBoundary = dashes *> string boundary
+    delimiter = crlf *> dashBoundary
+    part = message (mime' delimiter)
+    multipartBody =
+      skipTill (dashBoundary *> crlf) -- FIXME transport-padding
+      *> part `sepBy` crlf
+      <* dashes <* crlf <* skipTill end
