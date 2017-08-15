@@ -22,6 +22,7 @@ import Data.Word (Word8)
 
 import Control.Lens
 import Data.Attoparsec.ByteString as A
+import Data.Attoparsec.ByteString.Char8 (char8)
 import qualified Data.ByteString as B
 
 import Data.RFC5322.Internal
@@ -90,7 +91,10 @@ ccontent :: Parser B.ByteString
 ccontent = (B.singleton <$> satisfy isCtext) <|> comment
 
 comment :: Parser B.ByteString
-comment = word8 40 {-(-} *> (foldMany (optionalFWS <<>> ccontent)) <* optionalFWS <* word8 41 {-)-}
+comment =
+  char8 '('
+  *> (foldMany (optionalFWS <<>> ccontent)) <* optionalFWS
+  <* char8 ')'
 
 cfws :: Parser B.ByteString
 cfws =
@@ -115,7 +119,7 @@ quotedString =
     qcontent = B.singleton <$> satisfy qtext -- FIXME <|> quoted-pair
 
 dquote :: Parser Word8
-dquote = word8 34
+dquote = char8 '"'
 
 -- §3.6.8.  Optional fields
 
@@ -126,7 +130,7 @@ isFtext c = (c >= 33 && c <= 57) || (c >= 59 && c <= 126)
 field :: Parser (CI B.ByteString, B.ByteString)
 field = (,)
   <$> ci (takeWhile1 isFtext)
-  <*  word8 58 {-:-} <* many wsp
+  <*  char8 ':' <* many wsp
   <*> unstructured <* crlf
 
 unstructured :: Parser B.ByteString

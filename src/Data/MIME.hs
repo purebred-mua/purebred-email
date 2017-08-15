@@ -44,6 +44,7 @@ import Data.Word (Word8)
 
 import Control.Lens
 import Data.Attoparsec.ByteString
+import Data.Attoparsec.ByteString.Char8 (char8)
 import qualified Data.ByteString as B
 
 import Data.RFC5322
@@ -74,10 +75,10 @@ ctParameters f (ContentType a b c) = fmap (\c' -> ContentType a b c') (f c)
 contentType :: Parser ContentType
 contentType = ContentType
   <$> ci token
-  <*  word8 47 {-/-} <*> ci token
-  <*> many (word8 59 {-;-} *> skipWhile (== 32 {-SP-}) *> parameter)
+  <*  char8 '/' <*> ci token
+  <*> many (char8 ';' *> skipWhile (== 32 {-SP-}) *> parameter)
   where
-    parameter = (,) <$> ci token <* word8 61 {-=-} <*> value
+    parameter = (,) <$> ci token <* char8 '=' <*> value
     value = token <|> quotedString
     token = takeWhile1 (\c -> c >= 33 && c <= 126 && notInClass "()<>@,;:\\\"/[]?=" c)
 
