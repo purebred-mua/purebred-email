@@ -33,3 +33,15 @@ library
     , semigroups >= 0.16 && < 0.19
   hs-source-dirs:      src
   default-language:    Haskell2010
+
+executable purebred-email-parse
+  default-language:    Haskell2010
+  hs-source-dirs: tools
+  ghc-options: -Wall
+  main-is: Parse.hs
+  build-depends:
+    base
+    , attoparsec
+    , bytestring
+    , semigroups >= 0.16
+    , purebred-email
