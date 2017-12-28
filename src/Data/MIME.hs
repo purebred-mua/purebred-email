@@ -70,6 +70,7 @@ ctSubtype f (ContentType a b c) = fmap (\b' -> ContentType a b' c) (f b)
 
 ctParameters :: Lens' ContentType [(CI B.ByteString, B.ByteString)]
 ctParameters f (ContentType a b c) = fmap (\c' -> ContentType a b c') (f c)
+{-# ANN ctParameters ("HLint: ignore Avoid lambda" :: String) #-}
 
 -- | Parser for Content-Type header
 contentType :: Parser ContentType
