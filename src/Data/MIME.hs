@@ -39,8 +39,6 @@ specially, as part of the 'MIME' data type.
 -}
 
 import Control.Applicative
-import Data.Semigroup ((<>))
-import Data.Word (Word8)
 
 import Control.Lens
 import Data.Attoparsec.ByteString

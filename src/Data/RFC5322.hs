@@ -17,7 +17,7 @@ demands CRLF but LF-only is common in on-disk formats).
 -}
 
 import Control.Applicative
-import Control.Monad (join, void)
+import Control.Monad (void)
 import Data.Word (Word8)
 
 import Control.Lens
@@ -93,7 +93,7 @@ ccontent = (B.singleton <$> satisfy isCtext) <|> comment
 comment :: Parser B.ByteString
 comment =
   char8 '('
-  *> (foldMany (optionalFWS <<>> ccontent)) <* optionalFWS
+  *> foldMany (optionalFWS <<>> ccontent) <* optionalFWS
   <* char8 ')'
 
 cfws :: Parser B.ByteString

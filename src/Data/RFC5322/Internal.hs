@@ -18,7 +18,7 @@ import Control.Monad (void)
 import Data.Attoparsec.ByteString
 import Data.CaseInsensitive (CI, FoldCase, mk)
 import Data.Foldable (fold)
-import Data.List.NonEmpty (NonEmpty, fromList)
+import Data.List.NonEmpty (fromList)
 import Data.Semigroup (Semigroup((<>)))
 import Data.Semigroup.Foldable (fold1)
 
