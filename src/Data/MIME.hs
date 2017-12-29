@@ -17,6 +17,7 @@ module Data.MIME
   , ctSubtype
   , ctParameters
   , contentType
+  , defaultContentType
   ) where
 
 {- |
@@ -114,8 +115,8 @@ ctParameters f (ContentType a b c) = fmap (\c' -> ContentType a b c') (f c)
 {-# ANN ctParameters ("HLint: ignore Avoid lambda" :: String) #-}
 
 -- | Parser for Content-Type header
-contentType :: Parser ContentType
-contentType = ContentType
+parseContentType :: Parser ContentType
+parseContentType = ContentType
   <$> ci token
   <*  char8 '/' <*> ci token
   <*> many (char8 ';' *> skipWhile (== 32 {-SP-}) *> parameter)
@@ -123,6 +124,21 @@ contentType = ContentType
     parameter = (,) <$> ci token <* char8 '=' <*> value
     value = token <|> quotedString
     token = takeWhile1 (\c -> c >= 33 && c <= 126 && notInClass "()<>@,;:\\\"/[]?=" c)
+
+
+defaultContentType :: ContentType
+defaultContentType = ContentType "text" "plain" [("charset", "us-ascii")]
+
+-- | Get the content-type header
+--
+-- If the header is not specified or syntactically invalid, the
+-- default (text/plain) is used.  For more info see
+-- <https://tools.ietf.org/html/rfc2045#section-5.2>.
+contentType :: Getter Headers ContentType
+contentType = to (
+  fromMaybe defaultContentType
+  . preview (header "content-type" . parsed parseContentType)
+  )
 
 
 -- | Given a parser, construct a 'Fold'
@@ -145,8 +161,8 @@ mime'
   --   not multipart, we slurp the input until the parser matches.
   -> Headers
   -> Parser MIME
-mime' end h = case preview (header "content-type" . parsed contentType) h of
-  Just ct | view ctType ct == "multipart" ->
+mime' end h = case view contentType h of
+  ct | view ctType ct == "multipart" ->
     case preview (ctParameters . header "boundary") ct of
       Nothing -> part
       Just boundary -> Multipart <$> multipart end boundary
