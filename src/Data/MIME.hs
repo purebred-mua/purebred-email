@@ -8,6 +8,8 @@ module Data.MIME
   , mime
 
   , parsed
+  , entities
+  , contentTransferDecoded
 
   -- * Content-Type header
   , ContentType(..)
@@ -44,14 +46,55 @@ import Control.Lens
 import Data.Attoparsec.ByteString
 import Data.Attoparsec.ByteString.Char8 (char8)
 import qualified Data.ByteString as B
+import Data.CaseInsensitive (mk)
+import Data.Maybe (fromMaybe)
 
 import Data.RFC5322
 import Data.RFC5322.Internal
+import Data.MIME.Types
+import Data.MIME.Base64
+import Data.MIME.QuotedPrintable
+
+type Entity = (Headers, B.ByteString)
 
 data MIME
   = Part B.ByteString
   | Multipart [RFC5322 MIME]
   deriving (Show)
+
+-- | Get all terminal entities from the MIME message
+--
+entities :: Fold (RFC5322 MIME) Entity
+entities f (RFC5322 h a) = case a of
+  Part b ->
+    (\(h', b') -> RFC5322 h' (Part b')) <$> f (h, b)
+  Multipart bs ->
+    RFC5322 h . Multipart <$> sequenceA (entities f <$> bs)
+
+-- | Decode an entity according to its Content-Transfer-Encoding
+--
+contentTransferDecoded :: Fold Entity B.ByteString
+contentTransferDecoded = to f . folded
+  where
+  f (h, b) = preview (contentTransferEncoding h) b
+
+
+-- | Get the transfer decoder for an entity
+
+contentTransferEncoding :: Headers -> ContentTransferEncoding
+contentTransferEncoding h =
+  fromMaybe id $
+    preview (header "content-transfer-encoding") h
+    >>= (`lookup` table) . mk
+  where
+    table =
+      [ ("7bit", id)
+      , ("8bit", id)
+      , ("binary", id)
+      , ("quoted-printable", contentTransferEncodingQuotedPrintable)
+      , ("base64", contentTransferEncodingBase64)
+      -- TODO fail on unrecognised transfer encoding?
+      ]
 
 
 data ContentType = ContentType
