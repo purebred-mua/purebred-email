@@ -116,10 +116,16 @@ ctParameters f (ContentType a b c) = fmap (\c' -> ContentType a b c') (f c)
 
 -- | Parser for Content-Type header
 parseContentType :: Parser ContentType
-parseContentType = ContentType
-  <$> ci token
-  <*  char8 '/' <*> ci token
-  <*> many (char8 ';' *> skipWhile (== 32 {-SP-}) *> parameter)
+parseContentType = do
+  typ <- ci token
+  _ <- char8 '/'
+  subtype <- ci token
+  params <- many (char8 ';' *> skipWhile (== 32 {-SP-}) *> parameter)
+  if typ == "multipart" && "boundary" `notElem` fmap fst params
+    then
+      -- https://tools.ietf.org/html/rfc2046#section-5.1.1
+      fail "\"boundary\" parameter is required for multipart content type"
+    else pure $ ContentType typ subtype params
   where
     parameter = (,) <$> ci token <* char8 '=' <*> value
     value = token <|> quotedString
