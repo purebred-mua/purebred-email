@@ -146,11 +146,6 @@ contentType = to (
   )
 
 
--- | Given a parser, construct a 'Fold'
-parsed :: Parser a -> Fold B.ByteString a
-parsed p = to (parseOnly p) . folded
-
-
 -- | Top-level MIME body parser that uses headers to decide how to
 --   parse the body.
 --

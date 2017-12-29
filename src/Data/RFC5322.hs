@@ -13,7 +13,18 @@ demands CRLF but LF-only is common in on-disk formats).
 
 -}
 module Data.RFC5322
-  where
+  (
+  -- * Message types
+    RFC5322(..)
+  , message
+  , Headers
+  , header
+
+  -- * Parsers
+  , parsed
+  , crlf
+  , quotedString
+  ) where
 
 import Control.Applicative
 import Control.Monad (void)
@@ -31,6 +42,7 @@ type Headers = [(CI B.ByteString, B.ByteString)]
 header :: CI B.ByteString -> Fold Headers B.ByteString
 header k = folded . filtered ((k ==) . fst) . _2
 
+-- | Message type, parameterised over body type
 data RFC5322 a = RFC5322 Headers a
   deriving (Show)
 
@@ -139,3 +151,9 @@ unstructured =
 
 vchar :: Parser Word8
 vchar = satisfy (\c -> c >= 33 && c <= 126)
+
+
+
+-- | Given a parser, construct a 'Fold'
+parsed :: Parser a -> Fold B.ByteString a
+parsed p = to (parseOnly p) . folded
