@@ -1,9 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RankNTypes #-}
 
-module Data.RFC5322
-  where
-
 {- |
 
 Email messages.  Deals specifically with RFC 5322, which is stricter
@@ -15,6 +12,8 @@ This parser allows LF line endings in addition to CRLF (RFC 5322
 demands CRLF but LF-only is common in on-disk formats).
 
 -}
+module Data.RFC5322
+  where
 
 import Control.Applicative
 import Control.Monad (void)

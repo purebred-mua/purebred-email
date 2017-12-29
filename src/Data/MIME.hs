@@ -1,25 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RankNTypes #-}
 
-module Data.MIME
-  (
-  -- * MIME data
-    MIME(..)
-  , mime
-
-  , parsed
-  , entities
-  , contentTransferDecoded
-
-  -- * Content-Type header
-  , ContentType(..)
-  , ctType
-  , ctSubtype
-  , ctParameters
-  , contentType
-  , defaultContentType
-  ) where
-
 {- |
 
 MIME messages (RFC 2045, RFC 2046 and friends).
@@ -40,6 +21,24 @@ type to use for a given part.  Multipart messages are handled
 specially, as part of the 'MIME' data type.
 
 -}
+module Data.MIME
+  (
+  -- * MIME data
+    MIME(..)
+  , mime
+
+  , parsed
+  , entities
+  , contentTransferDecoded
+
+  -- * Content-Type header
+  , ContentType(..)
+  , ctType
+  , ctSubtype
+  , ctParameters
+  , contentType
+  , defaultContentType
+  ) where
 
 import Control.Applicative
 
