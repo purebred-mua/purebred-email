@@ -43,6 +43,7 @@ import Data.RFC5322.Internal
 
 type Headers = [(CI B.ByteString, B.ByteString)]
 
+-- | Get all values of the given header
 header :: CI B.ByteString -> Fold Headers B.ByteString
 header k = folded . filtered ((k ==) . fst) . _2
 

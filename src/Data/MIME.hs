@@ -38,6 +38,7 @@ module Data.MIME
   , contentType
   , defaultContentType
 
+  -- * Re-exports
   , module Data.RFC5322
   ) where
 
@@ -132,13 +133,14 @@ parseContentType = do
     token = takeWhile1 (\c -> c >= 33 && c <= 126 && notInClass "()<>@,;:\\\"/[]?=" c)
 
 
+-- | @text/plain; charset=us-ascii@
 defaultContentType :: ContentType
 defaultContentType = ContentType "text" "plain" [("charset", "us-ascii")]
 
--- | Get the content-type header
+-- | Get the content-type header.
 --
--- If the header is not specified or syntactically invalid, the
--- default (text/plain) is used.  For more info see
+-- If the header is not specified or is syntactically invalid,
+-- 'defaultContentType' is used.  For more info see
 -- <https://tools.ietf.org/html/rfc2045#section-5.2>.
 contentType :: Getter Headers ContentType
 contentType = to (
