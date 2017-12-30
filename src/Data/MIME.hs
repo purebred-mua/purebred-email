@@ -36,6 +36,7 @@ module Data.MIME
   , ctType
   , ctSubtype
   , ctParameters
+  , ctEq
   , contentType
   , defaultContentType
 
@@ -105,6 +106,11 @@ data ContentType = ContentType
   (CI B.ByteString) -- subtype
   [(CI B.ByteString, B.ByteString)]  -- parameters
   deriving (Show)
+
+-- | Are the type and subtype the same? (parameters are ignored)
+ctEq :: ContentType -> ContentType -> Bool
+ctEq (ContentType typ1 sub1 _) (ContentType typ2 sub2 _) =
+  typ1 == typ2 && sub1 == sub2
 
 ctType :: Lens' ContentType (CI B.ByteString)
 ctType f (ContentType a b c) = fmap (\a' -> ContentType a' b c) (f a)
