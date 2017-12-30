@@ -1,3 +1,4 @@
+{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RankNTypes #-}
 
@@ -21,6 +22,7 @@ module Data.RFC5322
   , header
 
   -- * Parsers
+  , parse
   , parsed
   , crlf
   , quotedString
@@ -31,8 +33,10 @@ import Control.Monad (void)
 import Data.Word (Word8)
 
 import Control.Lens
-import Data.Attoparsec.ByteString as A
+import Control.Lens.Cons.Extras (recons)
+import Data.Attoparsec.ByteString as A hiding (parse)
 import Data.Attoparsec.ByteString.Char8 (char8)
+import qualified Data.Attoparsec.ByteString.Lazy as AL
 import qualified Data.ByteString as B
 
 import Data.RFC5322.Internal
@@ -153,7 +157,28 @@ vchar :: Parser Word8
 vchar = satisfy (\c -> c >= 33 && c <= 126)
 
 
-
 -- | Given a parser, construct a 'Fold'
-parsed :: Parser a -> Fold B.ByteString a
-parsed p = to (parseOnly p) . folded
+--
+-- The input is convered to a /lazy/ @ByteString@.
+-- Build with rewrite rules enabled (@-O@, cabal's default)
+-- to achieve the following overheads for various input types:
+--
+-- * Lazy @ByteString@: no conversion
+-- * Strict @ByteString@: /O(1)/ conversion
+-- * @[Word8]@: /O(n)/ conversion
+--
+parsed :: (Cons s s Word8 Word8) => Parser a -> Fold s a
+parsed p = to (parse p) . folded
+
+-- | Parse an @a@.
+--
+-- The input is convered to a /lazy/ @ByteString@.
+-- Build with rewrite rules enabled (@-O@, cabal's default)
+-- to achieve the following overheads for various input types:
+--
+-- * Lazy @ByteString@: no conversion
+-- * Strict @ByteString@: /O(1)/ conversion
+-- * @[Word8]@: /O(n)/ conversion
+--
+parse :: (Cons s s Word8 Word8) => Parser a -> s -> Either String a
+parse p = AL.eitherResult . AL.parse p . view recons

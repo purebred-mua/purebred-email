@@ -10,7 +10,6 @@ import Data.Foldable (traverse_)
 import Data.Semigroup ((<>))
 import System.Environment (getArgs)
 
-import qualified Data.Attoparsec.ByteString.Lazy as A
 import qualified Data.ByteString.Lazy as L
 import Data.RFC5322
 import Data.MIME
@@ -25,7 +24,7 @@ main = do
 parseMail :: FilePath -> IO ()
 parseMail filename = do
   msgData <- L.readFile filename
-  case A.eitherResult $ A.parse (message mime) msgData of
+  case parse (message mime) msgData of
     Left e -> putStrLn (filename <> " (" <> e <> ") " <> analyse msgData)
     Right _ -> pure ()
 
