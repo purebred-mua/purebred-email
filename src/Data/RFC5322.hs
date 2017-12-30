@@ -16,7 +16,7 @@ demands CRLF but LF-only is common in on-disk formats).
 module Data.RFC5322
   (
   -- * Message types
-    RFC5322(..)
+    Message(..)
   , message
   , Headers
   , header
@@ -48,7 +48,7 @@ header :: CI B.ByteString -> Fold Headers B.ByteString
 header k = folded . filtered ((k ==) . fst) . _2
 
 -- | Message type, parameterised over body type
-data RFC5322 a = RFC5322 Headers a
+data Message a = Message Headers a
   deriving (Show)
 
 
@@ -78,8 +78,8 @@ atext = satisfy isAtext
 -- This parser does not handle the legitimate but obscure case
 -- of a message with no body (empty body is fine, though).
 --
-message :: (Headers -> Parser a) -> Parser (RFC5322 a)
-message f = fields >>= \hdrs -> RFC5322 hdrs <$> (crlf *> f hdrs)
+message :: (Headers -> Parser a) -> Parser (Message a)
+message f = fields >>= \hdrs -> Message hdrs <$> (crlf *> f hdrs)
 
 fields :: Parser Headers
 fields = many field

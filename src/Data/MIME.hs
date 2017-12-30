@@ -61,17 +61,17 @@ type Entity = (Headers, B.ByteString)
 
 data MIME
   = Part B.ByteString
-  | Multipart [RFC5322 MIME]
+  | Multipart [Message MIME]
   deriving (Show)
 
 -- | Get all terminal entities from the MIME message
 --
-entities :: Fold (RFC5322 MIME) Entity
-entities f (RFC5322 h a) = case a of
+entities :: Fold (Message MIME) Entity
+entities f (Message h a) = case a of
   Part b ->
-    (\(h', b') -> RFC5322 h' (Part b')) <$> f (h, b)
+    (\(h', b') -> Message h' (Part b')) <$> f (h, b)
   Multipart bs ->
-    RFC5322 h . Multipart <$> sequenceA (entities f <$> bs)
+    Message h . Multipart <$> sequenceA (entities f <$> bs)
 
 -- | Decode an entity according to its Content-Transfer-Encoding
 --
@@ -187,7 +187,7 @@ The multipart parser makes a few opinionated decisions.
 multipart
   :: Parser end    -- ^ parser that indicates where the epilogue ends
   -> B.ByteString  -- ^ boundary, sans leading "--"
-  -> Parser [RFC5322 MIME]
+  -> Parser [Message MIME]
 multipart end boundary =
   multipartBody
   where
