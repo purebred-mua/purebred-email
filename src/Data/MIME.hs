@@ -27,6 +27,7 @@ module Data.MIME
     MIME(..)
   , mime
 
+  , Entity
   , entities
   , contentTransferDecoded
 
