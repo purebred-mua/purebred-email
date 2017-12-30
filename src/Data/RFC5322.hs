@@ -18,6 +18,8 @@ module Data.RFC5322
   -- * Message types
     Message(..)
   , message
+  , messageHeaders
+  , messageBody
   , Headers
   , header
 
@@ -50,6 +52,15 @@ header k = folded . filtered ((k ==) . fst) . _2
 -- | Message type, parameterised over body type
 data Message a = Message Headers a
   deriving (Show)
+
+-- | Get headers of the message
+messageHeaders :: Lens' (Message a) Headers
+messageHeaders f (Message h b) = fmap (\h' -> Message h' b) (f h)
+{-# ANN messageHeaders ("HLint: ignore Avoid lambda" :: String) #-}
+
+messageBody :: Lens (Message a) (Message b) a b
+messageBody f (Message h b) = fmap (\b' -> Message h b') (f b)
+{-# ANN messageBody ("HLint: ignore Avoid lambda" :: String) #-}
 
 
 -- | Either CRLF or LF (lots of mail programs transform CRLF to LF)
