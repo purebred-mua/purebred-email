@@ -11,7 +11,6 @@ import Data.Semigroup ((<>))
 import System.Environment (getArgs)
 
 import qualified Data.ByteString.Lazy as L
-import Data.RFC5322
 import Data.MIME
 
 

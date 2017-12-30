@@ -27,7 +27,6 @@ module Data.MIME
     MIME(..)
   , mime
 
-  , parsed
   , entities
   , contentTransferDecoded
 
@@ -38,6 +37,8 @@ module Data.MIME
   , ctParameters
   , contentType
   , defaultContentType
+
+  , module Data.RFC5322
   ) where
 
 import Control.Applicative
