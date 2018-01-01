@@ -159,10 +159,16 @@ contentType = to (
 -- | Top-level MIME body parser that uses headers to decide how to
 --   parse the body.
 --
--- Do not use this parser for parsing a nested message.
+-- This parser can only be used at the top level.
+-- __Do not use this parser for parsing a nested message.__
+--
+-- This parser accepts non-MIME messages, and unconditionally
+-- treats them as a single part.
 --
 mime :: Headers -> Parser MIME
-mime = mime' endOfInput
+mime h
+  | nullOf (header "MIME-Version") h = Part <$> takeByteString
+  | otherwise = mime' endOfInput h
 
 mime'
   :: Parser end
