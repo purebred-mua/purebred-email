@@ -5,7 +5,7 @@ module Data.MIME.Types
     ContentTransferEncoding
   ) where
 
-import Control.Lens (Prism')
+import Control.Lens (APrism')
 import qualified Data.ByteString as B
 
-type ContentTransferEncoding = Prism' B.ByteString B.ByteString
+type ContentTransferEncoding = APrism' B.ByteString B.ByteString

@@ -3,7 +3,7 @@
 
 module ContentTransferEncodings where
 
-import Control.Lens (preview, review)
+import Control.Lens (clonePrism, preview, review)
 import qualified Data.ByteString as B
 
 import Test.Tasty
@@ -30,12 +30,12 @@ properties =
     ]
 
 prop_roundtrip :: ContentTransferEncoding -> B.ByteString -> Bool
-prop_roundtrip p s = preview p (review p s) == Just s
+prop_roundtrip p s = preview (clonePrism p) (review (clonePrism p) s) == Just s
 
 prop_linelength :: ContentTransferEncoding -> B.ByteString -> Property
 prop_linelength p s =
   let
-    encoded = review p s
+    encoded = review (clonePrism p) s
     prop = all ((<= 76) . B.length) (splitOnCRLF encoded)
   in
     cover (B.length encoded > 100) 50 "long output" prop

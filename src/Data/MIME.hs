@@ -38,6 +38,10 @@ module Data.MIME
   , ctParameters
   , ctEq
   , contentType
+
+  -- ** Content-Type values
+  , contentTypeTextPlain
+  , contentTypeApplicationOctetStream
   , defaultContentType
 
   -- * Re-exports
@@ -80,24 +84,23 @@ entities f (Message h a) = case a of
 contentTransferDecoded :: Fold Entity B.ByteString
 contentTransferDecoded = to f . folded
   where
-  f (h, b) = preview (contentTransferEncoding h) b
+  f (h, b) = (`preview` b) . clonePrism =<< contentTransferEncoding h
 
 
--- | Get the transfer decoder for an entity
-
-contentTransferEncoding :: Headers -> ContentTransferEncoding
-contentTransferEncoding h =
-  fromMaybe id $
-    preview (header "content-transfer-encoding") h
-    >>= (`lookup` table) . mk
+-- | Get the Content-Transfer-Encoding for an entity.
+-- Defaults to @7bit@ (RFC 2045 §6.1) if the header is
+-- not present.  Fails on /unrecognised/ values.
+--
+contentTransferEncoding :: Headers -> Maybe ContentTransferEncoding
+contentTransferEncoding h = lookup (mk v) table
   where
+    v = fromMaybe "7bit" $ preview (header "content-transfer-encoding") h
     table =
       [ ("7bit", id)
       , ("8bit", id)
       , ("binary", id)
       , ("quoted-printable", contentTransferEncodingQuotedPrintable)
       , ("base64", contentTransferEncodingBase64)
-      -- TODO fail on unrecognised transfer encoding?
       ]
 
 
@@ -142,18 +145,36 @@ parseContentType = do
 
 -- | @text/plain; charset=us-ascii@
 defaultContentType :: ContentType
-defaultContentType = ContentType "text" "plain" [("charset", "us-ascii")]
+defaultContentType =
+  over ctParameters (("charset", "us-ascii"):)
+  contentTypeTextPlain
+
+-- | @text/plain@
+contentTypeTextPlain :: ContentType
+contentTypeTextPlain = ContentType "text" "plain" []
+
+-- | @application/octet-stream@
+contentTypeApplicationOctetStream :: ContentType
+contentTypeApplicationOctetStream =
+  ContentType "application" "octet-stream" []
 
 -- | Get the content-type header.
 --
 -- If the header is not specified or is syntactically invalid,
 -- 'defaultContentType' is used.  For more info see
 -- <https://tools.ietf.org/html/rfc2045#section-5.2>.
+--
+-- If the Content-Transfer-Encoding is unrecognised, the
+-- actual Content-Type value is ignored and
+-- @application/octet-stream@ is returned, as required by
+-- <https://tools.ietf.org/html/rfc2049#section-2>.
+--
 contentType :: Getter Headers ContentType
-contentType = to (
-  fromMaybe defaultContentType
-  . preview (header "content-type" . parsed parseContentType)
-  )
+contentType = to $ \h -> case contentTransferEncoding h of
+  Nothing -> contentTypeApplicationOctetStream
+  Just _ ->
+    fromMaybe defaultContentType $
+    preview (header "content-type" . parsed parseContentType) h
 
 
 -- | Top-level MIME body parser that uses headers to decide how to
