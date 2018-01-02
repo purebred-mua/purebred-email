@@ -4,18 +4,24 @@
 name:                purebred-email
 version:             0.1.0.0
 synopsis:            types and parser for email messages (including MIME)
-description:         The purebred email library.  Notmuch else to say :)
+description:         The purebred email library.  RFC 5322, MIME, etc.
 license:             AGPL-3
 license-file:        LICENSE
 author:              Fraser Tweedale
 maintainer:          frase@frase.id.au
 copyright:           Copyright 2017  Fraser Tweedale
-category:            Data
+category:            Data, Email
 build-type:          Simple
 extra-source-files:  README.rst, stack.yaml
 cabal-version:       >=1.10
 tested-with:
   GHC==8.0.2, GHC==8.2.2
+
+homepage:            https://github.com/purebred-mua/purebred-email
+bug-reports:         https://github.com/purebred-mua/purebred-email/issues
+source-repository head
+  type: git
+  location: https://github.com/purebred-mua/purebred-email.git
 
 library
   exposed-modules:
