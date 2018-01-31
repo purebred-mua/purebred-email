@@ -145,23 +145,30 @@ contentTransferDecodeQuotedPrintable (B.PS sfp soff slen) = unsafeDupablePerform
             c <- peek sp
             case (c :: Word8) of
               61 {- = -} ->
-                -- slurp two more chars, if possible
-                if sp `plusPtr` 2 >= slimit
+                -- NOTE: strictly, only =\r\n is a valid soft line
+                -- break, but we accept =\n as well.
+                if sp `plusPtr` 1 >= slimit
                   then pure $ Left "reached end of input during '=' decoding"
                   else do
                     c1 <- peekByteOff sp 1
-                    c2 <- peekByteOff sp 2
-                    case (c1, c2) of
-                      (13, 10) {- CRLF -} ->
-                        -- Soft Line Break
-                        fill dp (sp `plusPtr` 3)
+                    case c1 of
+                      10 -> fill dp (sp `plusPtr` 2) -- soft line break (=\n)
                       _ ->
-                        maybe
-                          (pure $ Left "invalid hex sequence")
-                          (\(hi,lo) -> do
-                            poke dp (hi * 16 + lo)
-                            fill (dp `plusPtr` 1) (sp `plusPtr` 3) )
-                          ((,) <$> parseHex c1 <*> parseHex c2)
+                        if sp `plusPtr` 2 >= slimit
+                          then pure $ Left "reached end of input during '=' decoding"
+                          else do
+                            c2 <- peekByteOff sp 2
+                            case (c1, c2) of
+                              (13, 10) {- CRLF -} ->
+                                -- Soft Line Break (=\r\n)
+                                fill dp (sp `plusPtr` 3)
+                              _ ->
+                                maybe
+                                  (pure $ Left "invalid hex sequence")
+                                  (\(hi,lo) -> do
+                                    poke dp (hi * 16 + lo)
+                                    fill (dp `plusPtr` 1) (sp `plusPtr` 3) )
+                                  ((,) <$> parseHex c1 <*> parseHex c2)
               _ ->
                 -- assume that the char is valid here;
                 -- copy to dp and continue
