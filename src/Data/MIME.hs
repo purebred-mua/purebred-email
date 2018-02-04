@@ -205,7 +205,7 @@ mime' end h = case view contentType h of
       Just boundary -> Multipart <$> multipart end boundary
   _ -> part
   where
-    part = Part . B.pack <$> manyTill anyWord8 end
+    part = Part <$> takeTill' end
 
 {-
 
