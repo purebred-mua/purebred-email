@@ -10,7 +10,7 @@ import Data.Foldable (traverse_)
 import Data.Semigroup ((<>))
 import System.Environment (getArgs)
 
-import qualified Data.ByteString.Lazy as L
+import qualified Data.ByteString as B
 import Data.MIME
 
 
@@ -22,16 +22,16 @@ main = do
 
 parseMail :: FilePath -> IO ()
 parseMail filename = do
-  msgData <- L.readFile filename
+  msgData <- B.readFile filename
   case parse (message mime) msgData of
     Left e -> putStrLn (filename <> " (" <> e <> ") " <> analyse msgData)
     Right _ -> pure ()
 
-analyse :: L.ByteString -> String
+analyse :: B.ByteString -> String
 analyse s = fst $ head $ filter snd $ fmap (fmap ($ s)) tests
   where
   tests =
-    [ ("non-ascii chars", L.any (> 127))
+    [ ("non-ascii chars", B.any (> 127))
     , ("unknown", const True)
     ]
 
