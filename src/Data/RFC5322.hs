@@ -181,6 +181,7 @@ vchar = satisfy (\c -> c >= 33 && c <= 126)
 --
 parsed :: (Cons s s Word8 Word8) => Parser a -> Fold s a
 parsed p = to (parse p) . folded
+{-# INLINE parsed #-}
 
 -- | Parse an @a@.
 --
@@ -194,3 +195,4 @@ parsed p = to (parse p) . folded
 --
 parse :: (Cons s s Word8 Word8) => Parser a -> s -> Either String a
 parse p = AL.eitherResult . AL.parse p . view recons
+{-# INLINE parse #-}
