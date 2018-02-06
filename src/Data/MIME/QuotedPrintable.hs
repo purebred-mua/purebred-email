@@ -125,7 +125,7 @@ contentTransferEncodeQuotedPrintable' poke' mkResult dptr (B.PS sfp soff slen) =
                     pokeSoftLineBreak dp
                     *> pokeEncoded (dp `plusPtr` 3) c
                     *> fill 3 (dp `plusPtr` 6) (sp `plusPtr` 1)
-    fill 0 dptr sptr
+    fill 0 dptr (sptr `plusPtr` soff)
 
 contentTransferDecodeQuotedPrintable :: B.ByteString -> Either String B.ByteString
 contentTransferDecodeQuotedPrintable (B.PS sfp soff slen) = unsafeDupablePerformIO $ do
@@ -173,7 +173,7 @@ contentTransferDecodeQuotedPrintable (B.PS sfp soff slen) = unsafeDupablePerform
                 -- assume that the char is valid here;
                 -- copy to dp and continue
                 poke dp c *> fill (dp `plusPtr` 1) (sp `plusPtr` 1)
-      fill dptr sptr
+      fill dptr (sptr `plusPtr` soff)
   pure $ B.PS dfp 0 <$> result
 
 contentTransferEncodingQuotedPrintable :: ContentTransferEncoding
