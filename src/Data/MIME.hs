@@ -51,11 +51,14 @@ module Data.MIME
 import Control.Applicative
 
 import Control.Lens
+import Control.Monad (void)
 import Data.Attoparsec.ByteString
 import Data.Attoparsec.ByteString.Char8 (char8)
 import qualified Data.ByteString as B
+import qualified Data.ByteString.Char8 as C8
 import Data.CaseInsensitive (mk)
 import Data.Maybe (fromMaybe)
+import Data.Semigroup ((<>))
 
 import Data.RFC5322
 import Data.RFC5322.Internal
@@ -189,23 +192,23 @@ contentType = to $ \h -> case contentTransferEncoding h of
 mime :: Headers -> Parser MIME
 mime h
   | nullOf (header "MIME-Version") h = Part <$> takeByteString
-  | otherwise = mime' endOfInput h
+  | otherwise = mime' takeByteString h
 
 mime'
-  :: Parser end
-  -- ^ Parser for the part delimiter.  If this part is multipart,
-  --   we pass it on to the 'multipart' parser.  If this part is
-  --   not multipart, we slurp the input until the parser matches.
+  :: Parser B.ByteString
+  -- ^ Parser FOR A TAKE to the part delimiter.  If this part is
+  -- multipart, we pass it on to the 'multipart' parser.  If this
+  -- part is not multipart, we just do the take.
   -> Headers
   -> Parser MIME
-mime' end h = case view contentType h of
+mime' takeTillEnd h = case view contentType h of
   ct | view ctType ct == "multipart" ->
     case preview (ctParameters . header "boundary") ct of
       Nothing -> part
-      Just boundary -> Multipart <$> multipart end boundary
+      Just boundary -> Multipart <$> multipart takeTillEnd boundary
   _ -> part
   where
-    part = Part <$> takeTill' end
+    part = Part <$> takeTillEnd
 
 {-
 
@@ -219,17 +222,21 @@ The multipart parser makes a few opinionated decisions.
 
 -}
 multipart
-  :: Parser end    -- ^ parser that indicates where the epilogue ends
-  -> B.ByteString  -- ^ boundary, sans leading "--"
+  :: Parser B.ByteString  -- ^ parser to the end of the part
+  -> B.ByteString         -- ^ boundary, sans leading "--"
   -> Parser [Message MIME]
-multipart end boundary =
+multipart takeTillEnd boundary =
   multipartBody
   where
-    dashes = string "--"
-    dashBoundary = dashes *> string boundary
-    delimiter = crlf *> dashBoundary
-    part = message (mime' delimiter)
+    delimiter = "\n--" <> boundary
+    dashBoundary = B.tail delimiter
+    part = message (mime' (trim <$> takeTillString delimiter))
+    trim s  -- trim trailing CR, because we only searched for LF
+      | B.null s = s
+      | C8.last s == '\r' = B.init s
+      | otherwise = s
+
     multipartBody =
-      skipTill (dashBoundary *> crlf) -- FIXME transport-padding
+      skipTillString dashBoundary *> crlf -- FIXME transport-padding
       *> part `sepBy` crlf
-      <* dashes <* crlf <* skipTill end
+      <* string "--" <* crlf <* void takeTillEnd
