@@ -171,13 +171,7 @@ vchar = satisfy (\c -> c >= 33 && c <= 126)
 
 -- | Given a parser, construct a 'Fold'
 --
--- The input is convered to a /lazy/ @ByteString@.
--- Build with rewrite rules enabled (@-O@, cabal's default)
--- to achieve the following overheads for various input types:
---
--- * Lazy @ByteString@: no conversion
--- * Strict @ByteString@: /O(1)/ conversion
--- * @[Word8]@: /O(n)/ conversion
+-- See 'parse' for discussion of performance.
 --
 parsed :: (Cons s s Word8 Word8) => Parser a -> Fold s a
 parsed p = to (parse p) . folded
@@ -187,11 +181,17 @@ parsed p = to (parse p) . folded
 --
 -- The input is convered to a /lazy/ @ByteString@.
 -- Build with rewrite rules enabled (@-O@, cabal's default)
--- to achieve the following overheads for various input types:
+-- to achieve the following conversion overheads:
 --
 -- * Lazy @ByteString@: no conversion
 -- * Strict @ByteString@: /O(1)/ conversion
 -- * @[Word8]@: /O(n)/ conversion
+--
+-- It is __recommended to use strict bytestring__ input.  Parsing a
+-- lazy bytestring will cause numerous parser buffer resizes.  The
+-- lazy chunks in the input can be GC'd but the buffer keeps growing
+-- so you don't actually keep the memory usage low by using a lazy
+-- bytestring.
 --
 parse :: (Cons s s Word8 Word8) => Parser a -> s -> Either String a
 parse p = AL.eitherResult . AL.parse p . view recons
