@@ -11,9 +11,10 @@ Implementation of Quoted-Printable Content-Transfer-Encoding.
 module Data.MIME.QuotedPrintable
   (
     contentTransferEncodingQuotedPrintable
+  , q
   ) where
 
-import Control.Lens (prism')
+import Control.Lens (APrism', prism')
 import Data.Bits ((.&.), shiftR)
 import Data.Bool (bool)
 import qualified Data.ByteString as B
@@ -25,41 +26,45 @@ import Foreign
   )
 import System.IO.Unsafe (unsafeDupablePerformIO)
 
-import Data.MIME.Types (ContentTransferEncoding)
+import Data.MIME.Types
+
+data QuotedPrintableMode = QuotedPrintable | Q
+  deriving (Eq)
 
 -- | Whether it is required to encode a character
 -- (where that character does not precede EOL).
-encodingRequiredNonEOL :: Word8 -> Bool
-encodingRequiredNonEOL c = not (
+encodingRequiredNonEOL :: QuotedPrintableMode -> Word8 -> Bool
+encodingRequiredNonEOL mode c = not (
   (c >= 33 && c <= 60)
   || (c >= 62 && c <= 126)
   || c == 9
   || c == 32
-  )
+  ) || (mode == Q && c == 95 {- underscore -})
 
 
 -- | Whether it is required to encode a character
 -- (where that character does precede EOL).
-encodingRequiredEOL :: Word8 -> Bool
-encodingRequiredEOL c = not (
+encodingRequiredEOL :: QuotedPrintableMode -> Word8 -> Bool
+encodingRequiredEOL mode c = not (
   (c >= 33 && c <= 60)
   || (c >= 62 && c <= 126)
-  )
+  ) || (mode == Q && c == 95 {- underscore -})
 
 -- | Two-pass solution: first determine output length, then
 -- do the copy.
 -- output length.
-contentTransferEncodeQuotedPrintable :: B.ByteString -> B.ByteString
-contentTransferEncodeQuotedPrintable s = unsafeDupablePerformIO $ do
-  l <- contentTransferEncodeQuotedPrintable'
+encodeQuotedPrintable :: QuotedPrintableMode -> B.ByteString -> B.ByteString
+encodeQuotedPrintable mode s = unsafeDupablePerformIO $ do
+  l <- encodeQuotedPrintable' mode
         (\_ _ -> pure ()) id nullPtr s
   dfp <- B.mallocByteString l
   withForeignPtr dfp $ \dptr ->
-    contentTransferEncodeQuotedPrintable'
+    encodeQuotedPrintable' mode
       poke (B.PS dfp 0) dptr s
 
-contentTransferEncodeQuotedPrintable'
-  :: (Ptr Word8 -> Word8 -> IO ()) -- "poke" function
+encodeQuotedPrintable'
+  :: QuotedPrintableMode
+  -> (Ptr Word8 -> Word8 -> IO ()) -- "poke" function
   -> (Int -> r)                    -- "return" function
   -> Ptr Word8
   -- ^ dest pointer; **assumed to be big enough to hold output**.
@@ -69,7 +74,7 @@ contentTransferEncodeQuotedPrintable'
   -> B.ByteString
   -- ^ input string
   -> IO r
-contentTransferEncodeQuotedPrintable' poke' mkResult dptr (B.PS sfp soff slen) =
+encodeQuotedPrintable' mode poke' mkResult dptr (B.PS sfp soff slen) =
   fmap mkResult $ withForeignPtr sfp $ \sptr -> do
     let
       slimit = sptr `plusPtr` (soff + slen)
@@ -95,6 +100,9 @@ contentTransferEncodeQuotedPrintable' poke' mkResult dptr (B.PS sfp soff slen) =
           *> poke' (ptr `plusPtr` 1) hi
           *> poke' (ptr `plusPtr` 2) lo
 
+      mapChar 32 {- ' ' -} | mode == Q = 95 {- _ -}
+      mapChar c = c
+
       fill col !dp !sp
         | sp >= slimit = pure $ dp `minusPtr` dptr
         | otherwise = do
@@ -107,28 +115,29 @@ contentTransferEncodeQuotedPrintable' poke' mkResult dptr (B.PS sfp soff slen) =
                 cAtEOL <- crlf (sp `plusPtr` 1)
                 let
                   encodingRequired =
-                    (cAtEOL && encodingRequiredEOL c)
-                    || encodingRequiredNonEOL c
+                    (cAtEOL && encodingRequiredEOL mode c)
+                    || encodingRequiredNonEOL mode c
                   bytesNeeded = bool 1 3 encodingRequired
+                  c' = mapChar c
                 case (col + bytesNeeded >= 76, encodingRequired) of
                   (False, False) ->
-                    poke' dp c
+                    poke' dp c'
                     *> fill (col + bytesNeeded) (dp `plusPtr` bytesNeeded) (sp `plusPtr` 1)
                   (False, True) ->
-                    pokeEncoded dp c
+                    pokeEncoded dp c'
                     *> fill (col + bytesNeeded) (dp `plusPtr` bytesNeeded) (sp `plusPtr` 1)
                   (True, False) ->
                     pokeSoftLineBreak dp
-                    *> poke' (dp `plusPtr` 3) c
+                    *> poke' (dp `plusPtr` 3) c'
                     *> fill 1 (dp `plusPtr` 4) (sp `plusPtr` 1)
                   (True, True) ->
                     pokeSoftLineBreak dp
-                    *> pokeEncoded (dp `plusPtr` 3) c
+                    *> pokeEncoded (dp `plusPtr` 3) c'
                     *> fill 3 (dp `plusPtr` 6) (sp `plusPtr` 1)
     fill 0 dptr (sptr `plusPtr` soff)
 
-contentTransferDecodeQuotedPrintable :: B.ByteString -> Either String B.ByteString
-contentTransferDecodeQuotedPrintable (B.PS sfp soff slen) = unsafeDupablePerformIO $ do
+decodeQuotedPrintable :: QuotedPrintableMode -> B.ByteString -> Either String B.ByteString
+decodeQuotedPrintable mode (B.PS sfp soff slen) = unsafeDupablePerformIO $ do
   -- Precise length of decoded string is not yet known, but
   -- it cannot be longer than input, and is likely to be not
   -- much shorter.  Therefore allocate slen bytes and only
@@ -169,17 +178,31 @@ contentTransferDecodeQuotedPrintable (B.PS sfp soff slen) = unsafeDupablePerform
                                     poke dp (hi * 16 + lo)
                                     fill (dp `plusPtr` 1) (sp `plusPtr` 3) )
                                   ((,) <$> parseHex c1 <*> parseHex c2)
+
+              -- otherwise assume that the char is valid and copy it to dst
+
+              95 {- _ -} | mode == Q ->
+                poke dp 32 {- ' ' -} *> fill (dp `plusPtr` 1) (sp `plusPtr` 1)
+
+              32 {- ' ' -} | mode == Q ->
+                pure $ Left "space cannot appear in 'Q' encoding"
+
               _ ->
-                -- assume that the char is valid here;
-                -- copy to dp and continue
                 poke dp c *> fill (dp `plusPtr` 1) (sp `plusPtr` 1)
+
       fill dptr (sptr `plusPtr` soff)
   pure $ B.PS dfp 0 <$> result
 
+mkPrism :: QuotedPrintableMode -> APrism' B.ByteString B.ByteString
+mkPrism mode = prism'
+  (encodeQuotedPrintable mode)
+  (either (const Nothing) Just . decodeQuotedPrintable mode)
+
 contentTransferEncodingQuotedPrintable :: ContentTransferEncoding
-contentTransferEncodingQuotedPrintable = prism'
-  contentTransferEncodeQuotedPrintable
-  (either (const Nothing) Just . contentTransferDecodeQuotedPrintable)
+contentTransferEncodingQuotedPrintable = mkPrism QuotedPrintable
+
+q :: EncodedWordEncoding
+q = mkPrism Q
 
 {-
   (1)   An "=" followed by two hexadecimal digits, one or both

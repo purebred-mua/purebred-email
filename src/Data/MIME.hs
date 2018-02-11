@@ -31,6 +31,9 @@ module Data.MIME
   , entities
   , contentTransferDecoded
 
+  -- * Header processing
+  , decodeEncodedWords
+
   -- * Content-Type header
   , ContentType(..)
   , ctType
@@ -62,6 +65,7 @@ import Data.Semigroup ((<>))
 
 import Data.RFC5322
 import Data.RFC5322.Internal
+import Data.MIME.EncodedWord
 import Data.MIME.Types
 import Data.MIME.Base64
 import Data.MIME.QuotedPrintable
