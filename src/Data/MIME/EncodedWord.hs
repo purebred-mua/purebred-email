@@ -21,9 +21,8 @@ import Data.Attoparsec.ByteString.Char8 (char8)
 import qualified Data.ByteString as B
 import qualified Data.CaseInsensitive as CI
 import qualified Data.Text as T
-import qualified Data.Text.Encoding as T
-import qualified Data.Text.Encoding.Error as T
 
+import Data.MIME.Charset
 import Data.MIME.Types
 import Data.MIME.Base64
 import Data.MIME.QuotedPrintable
@@ -71,7 +70,7 @@ decodeEncodedWord a@(EncodedWord charset _lang encName s) =
   where
     r = do
       enc <- lookup encName encodedWordEncodings
-      textDec <- lookup charset textDecoders
+      textDec <- lookupCharset charset
       decoded <- preview (clonePrism enc) s
       pure $ textDec decoded
 
@@ -82,18 +81,6 @@ encodedWordEncodings = [("Q", q), ("B", b)]
 b :: EncodedWordEncoding
 b = contentTransferEncodingBase64
 
-
-textDecoders :: [(CI.CI B.ByteString, B.ByteString -> T.Text)]
-textDecoders =
-  [ ("us-ascii", decodeLenient)
-  , ("iso-8859-1", T.decodeLatin1)
-  , ("utf-8", decodeLenient)
-  -- , ("windows-1252", ...)         -- seen in Fraser's mail corpus
-  -- , ("big5", ...)                 -- seen in Fraser's mail corpus
-  ]
-
-decodeLenient :: B.ByteString -> T.Text
-decodeLenient = T.decodeUtf8With T.lenientDecode
 
 decodeEncodedWords :: B.ByteString -> T.Text
 decodeEncodedWords s =

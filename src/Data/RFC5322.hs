@@ -18,8 +18,8 @@ module Data.RFC5322
   -- * Message types
     Message(..)
   , message
-  , messageHeaders
-  , messageBody
+  , headers
+  , body
   , Headers
   , header
 
@@ -49,18 +49,22 @@ type Headers = [(CI B.ByteString, B.ByteString)]
 header :: CI B.ByteString -> Fold Headers B.ByteString
 header k = folded . filtered ((k ==) . fst) . _2
 
--- | Message type, parameterised over body type
-data Message a = Message Headers a
+-- | Message type, parameterised over context and body type.  The
+-- context type is not used in this module but is provided for uses
+-- such as tracking the transfer/charset encoding state in MIME
+-- messages.
+--
+data Message s a = Message Headers a
   deriving (Show)
 
 -- | Get headers of the message
-messageHeaders :: Lens' (Message a) Headers
-messageHeaders f (Message h b) = fmap (\h' -> Message h' b) (f h)
-{-# ANN messageHeaders ("HLint: ignore Avoid lambda" :: String) #-}
+headers :: Lens' (Message s a) Headers
+headers f (Message h b) = fmap (\h' -> Message h' b) (f h)
+{-# ANN headers ("HLint: ignore Avoid lambda" :: String) #-}
 
-messageBody :: Lens (Message a) (Message b) a b
-messageBody f (Message h b) = fmap (\b' -> Message h b') (f b)
-{-# ANN messageBody ("HLint: ignore Avoid lambda" :: String) #-}
+body :: Lens (Message s a) (Message s b) a b
+body f (Message h b) = fmap (\b' -> Message h b') (f b)
+{-# ANN body ("HLint: ignore Avoid lambda" :: String) #-}
 
 
 -- | Either CRLF or LF (lots of mail programs transform CRLF to LF)
@@ -89,7 +93,7 @@ atext = satisfy isAtext
 -- This parser does not handle the legitimate but obscure case
 -- of a message with no body (empty body is fine, though).
 --
-message :: (Headers -> Parser a) -> Parser (Message a)
+message :: (Headers -> Parser a) -> Parser (Message s a)
 message f = fields >>= \hdrs -> Message hdrs <$> (crlf *> f hdrs)
 
 fields :: Parser Headers

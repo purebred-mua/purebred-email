@@ -26,10 +26,15 @@ module Data.MIME
   -- * MIME data
     MIME(..)
   , mime
+  , MIMEMessage
 
-  , Entity
   , entities
+  , WireEntity
+  , ByteEntity
+  , TextEntity
+
   , contentTransferDecoded
+  , charsetDecoded
 
   -- * Header processing
   , decodeEncodedWords
@@ -41,6 +46,7 @@ module Data.MIME
   , ctParameters
   , ctEq
   , contentType
+  , charset
 
   -- ** Content-Type values
   , contentTypeTextPlain
@@ -52,46 +58,64 @@ module Data.MIME
   ) where
 
 import Control.Applicative
+import Control.Monad (void)
+import Data.Maybe (fromMaybe)
+import Data.Semigroup ((<>))
 
 import Control.Lens
-import Control.Monad (void)
 import Data.Attoparsec.ByteString
 import Data.Attoparsec.ByteString.Char8 (char8)
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Char8 as C8
-import Data.CaseInsensitive (mk)
-import Data.Maybe (fromMaybe)
-import Data.Semigroup ((<>))
+import qualified Data.CaseInsensitive as CI
+import qualified Data.Text as T
 
 import Data.RFC5322
 import Data.RFC5322.Internal
+import Data.MIME.Charset
 import Data.MIME.EncodedWord
 import Data.MIME.Types
 import Data.MIME.Base64
 import Data.MIME.QuotedPrintable
 
-type Entity = (Headers, B.ByteString)
+
+-- | Entity is formatted for transfer.  Processing requires
+-- transfer decoding.
+--
+data EncStateWire
+
+-- | Entity requires content-transfer-encoding to send,
+--   and may require charset decoding to read.
+--
+data EncStateByte
+
+type MIMEMessage = Message EncStateWire MIME
+type WireEntity = Message EncStateWire B.ByteString
+type ByteEntity = Message EncStateByte B.ByteString
+type TextEntity = Message () T.Text
 
 data MIME
   = Part B.ByteString
-  | Multipart [Message MIME]
+  | Multipart [MIMEMessage]
   deriving (Show)
 
 -- | Get all terminal entities from the MIME message
 --
-entities :: Fold (Message MIME) Entity
+entities :: Fold MIMEMessage WireEntity
 entities f (Message h a) = case a of
   Part b ->
-    (\(h', b') -> Message h' (Part b')) <$> f (h, b)
+    (\(Message h' b') -> Message h' (Part b')) <$> f (Message h b)
   Multipart bs ->
     Message h . Multipart <$> sequenceA (entities f <$> bs)
 
 -- | Decode an entity according to its Content-Transfer-Encoding
 --
-contentTransferDecoded :: Fold Entity B.ByteString
+contentTransferDecoded :: Fold WireEntity ByteEntity
 contentTransferDecoded = to f . folded
   where
-  f (h, b) = (`preview` b) . clonePrism =<< contentTransferEncoding h
+  f (Message h b) =
+    contentTransferEncoding h
+    >>= fmap (Message h) . (`preview` b) . clonePrism
 
 
 -- | Get the Content-Transfer-Encoding for an entity.
@@ -99,7 +123,7 @@ contentTransferDecoded = to f . folded
 -- not present.  Fails on /unrecognised/ values.
 --
 contentTransferEncoding :: Headers -> Maybe ContentTransferEncoding
-contentTransferEncoding h = lookup (mk v) table
+contentTransferEncoding h = lookup (CI.mk v) table
   where
     v = fromMaybe "7bit" $ preview (header "content-transfer-encoding") h
     table =
@@ -111,10 +135,21 @@ contentTransferEncoding h = lookup (mk v) table
       ]
 
 
+type Parameters = [(CI B.ByteString, B.ByteString)]
+
+parameter :: CI B.ByteString -> Fold Parameters B.ByteString
+parameter = header
+{-# INLINE parameter #-}
+
+caseInsensitive :: CI.FoldCase s => Iso' s (CI s)
+caseInsensitive = iso CI.mk CI.original
+{-# INLINE caseInsensitive #-}
+
+
 data ContentType = ContentType
   (CI B.ByteString) -- type
   (CI B.ByteString) -- subtype
-  [(CI B.ByteString, B.ByteString)]  -- parameters
+  Parameters
   deriving (Show)
 
 -- | Are the type and subtype the same? (parameters are ignored)
@@ -138,16 +173,31 @@ parseContentType = do
   typ <- ci token
   _ <- char8 '/'
   subtype <- ci token
-  params <- many (char8 ';' *> skipWhile (== 32 {-SP-}) *> parameter)
+  params <- many (char8 ';' *> skipWhile (== 32 {-SP-}) *> param)
   if typ == "multipart" && "boundary" `notElem` fmap fst params
     then
       -- https://tools.ietf.org/html/rfc2046#section-5.1.1
       fail "\"boundary\" parameter is required for multipart content type"
     else pure $ ContentType typ subtype params
   where
-    parameter = (,) <$> ci token <* char8 '=' <*> value
+    param = (,) <$> ci token <* char8 '=' <*> value
     value = token <|> quotedString
     token = takeWhile1 (\c -> c >= 33 && c <= 126 && notInClass "()<>@,;:\\\"/[]?=" c)
+
+-- | Character set of the body.
+-- @us-ascii@ if not declared.  No result if unrecognised.
+--
+charset :: Fold Headers Charset
+charset = to (fromMaybe "us-ascii" . preview p) . to lookupCharset . folded
+  where
+  p = contentType . ctParameters . parameter "charset" . caseInsensitive
+
+-- | Decode the message into @Text@.  Fails on unrecognised charset.
+--
+charsetDecoded :: Fold ByteEntity TextEntity
+charsetDecoded = to f . folded
+  where
+  f (Message h b) = Message h . ($ b) <$> preview charset h
 
 
 -- | @text/plain; charset=us-ascii@
@@ -228,7 +278,7 @@ The multipart parser makes a few opinionated decisions.
 multipart
   :: Parser B.ByteString  -- ^ parser to the end of the part
   -> B.ByteString         -- ^ boundary, sans leading "--"
-  -> Parser [Message MIME]
+  -> Parser [MIMEMessage]
 multipart takeTillEnd boundary =
   multipartBody
   where
