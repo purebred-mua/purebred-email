@@ -1,7 +1,9 @@
 {-# LANGUAGE BangPatterns #-}
+{-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE TupleSections #-}
+{-# LANGUAGE TypeFamilies #-}
 
 {- |
 
@@ -20,6 +22,10 @@ module Data.MIME.Parameter
     Parameters
   , parameter
   , rawParameter
+
+  , ParameterValue
+  , value
+
   ) where
 
 import Control.Applicative ((<|>), optional)
@@ -29,13 +35,15 @@ import Data.Word (Word8)
 import Foreign (withForeignPtr, plusPtr, minusPtr, peek, peekByteOff, poke)
 import System.IO.Unsafe (unsafeDupablePerformIO)
 
-import Control.Lens (Fold, _2, filtered, folded, to)
+import Control.Lens (Fold, Lens, _2, filtered, folded, set, to, view)
 import Data.Attoparsec.ByteString.Char8
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Internal as B
 import qualified Data.ByteString.Char8 as C
 import Data.CaseInsensitive (CI, mk)
+import qualified Data.Text as T
 
+import Data.MIME.Charset
 import Data.RFC5322.Internal (ci)
 
 type Parameters = [(CI B.ByteString, B.ByteString)]
@@ -79,13 +87,22 @@ otherSection k i m =
   where
     i' = mk $ C.pack (show i)
 
-data ParameterValue = ParameterValue
+data ParameterValue a = ParameterValue
   (Maybe (CI B.ByteString))  -- charset
   (Maybe (CI B.ByteString))  -- language
-  B.ByteString               -- value (percent-decoded)
-  deriving (Show)
+  a                          -- value
 
-getParameter :: CI B.ByteString -> Parameters -> Maybe ParameterValue
+value :: Lens (ParameterValue a) (ParameterValue b) a b
+value f (ParameterValue a b c) = ParameterValue a b <$> f c
+
+
+instance HasCharset (ParameterValue B.ByteString) where
+  type Decoded (ParameterValue B.ByteString) = ParameterValue T.Text
+  charsetName = to $ \(ParameterValue name _ _) -> name
+  charsetData = value
+  charsetDecoded = to $ \a -> (\t -> set value t a) <$> view charsetText a
+
+getParameter :: CI B.ByteString -> Parameters -> Maybe (ParameterValue B.ByteString)
 getParameter k m = do
   InitialSection cont enc s <- initialSection k m
   (charset, lang, v0) <-
@@ -112,7 +129,7 @@ getParameter k m = do
 -- | Get parameter value.  Continuations, encoding and charset
 -- are processed.
 --
-parameter :: CI B.ByteString -> Fold Parameters ParameterValue
+parameter :: CI B.ByteString -> Fold Parameters (ParameterValue B.ByteString)
 parameter k = to (getParameter k) . folded
 
 -- | Raw parameter.  The key is used as-is.  No processing of

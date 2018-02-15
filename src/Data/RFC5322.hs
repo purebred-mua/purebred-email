@@ -57,12 +57,11 @@ header k = folded . filtered ((k ==) . fst) . _2
 data Message s a = Message Headers a
   deriving (Show)
 
--- | Get headers of the message
 headers :: Lens' (Message s a) Headers
 headers f (Message h b) = fmap (\h' -> Message h' b) (f h)
 {-# ANN headers ("HLint: ignore Avoid lambda" :: String) #-}
 
-body :: Lens (Message s a) (Message s b) a b
+body :: Lens (Message ctx a) (Message ctx' b) a b
 body f (Message h b) = fmap (\b' -> Message h b') (f b)
 {-# ANN body ("HLint: ignore Avoid lambda" :: String) #-}
 

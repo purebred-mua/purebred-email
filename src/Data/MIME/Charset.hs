@@ -1,4 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE TypeFamilies #-}
 
 {- |
 
@@ -12,12 +13,16 @@ Recognised charsets:
 
 -}
 module Data.MIME.Charset
-  ( Charset
-  , charsets
-  , lookupCharset
+  (
+    HasCharset(..)
+  , charsetText
+  , CharsetError(..)
+  , CharsetName
+
   , decodeLenient
   ) where
 
+import Control.Lens (Getter, to, view)
 import qualified Data.ByteString as B
 import qualified Data.CaseInsensitive as CI
 import qualified Data.Text as T
@@ -26,7 +31,35 @@ import qualified Data.Text.Encoding.Error as T
 
 {-# ANN module ("HLint: ignore Use camelCase" :: String) #-}
 
+type CharsetName = CI.CI B.ByteString
 type Charset = B.ByteString -> T.Text  -- eventually we might want a prism
+
+data CharsetError
+  = CharsetUnspecified
+  | CharsetUnsupported CharsetName
+  | CharsetDecodeError CharsetName B.ByteString
+  deriving (Show)
+
+class HasCharset a where
+  type Decoded a
+
+  -- | Get the declared character set name.  There is no guarantee
+  -- that it corresponds to a registered or supported charset.
+  charsetName :: Getter a (Maybe CharsetName)
+
+  -- | Return the encoded data in the structure
+  charsetData :: Getter a B.ByteString
+
+  -- | Structure with the encoded data replaced with 'Text'
+  charsetDecoded :: Getter a (Either CharsetError (Decoded a))
+
+
+-- | Decode the object according to the declared charset.
+charsetText :: HasCharset a => Getter a (Either CharsetError T.Text)
+charsetText = to $ \a ->
+  maybe (Left CharsetUnspecified) Right (view charsetName a)
+  >>= \k -> maybe (Left $ CharsetUnsupported k) Right (lookupCharset k)
+  >>= \f -> pure (f (view charsetData a))
 
 charsets :: [(CI.CI B.ByteString, Charset)]
 charsets =

@@ -1,5 +1,8 @@
+{-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE TypeSynonymInstances #-}
 
 {- |
 
@@ -46,7 +49,6 @@ module Data.MIME
   , ctParameters
   , ctEq
   , contentType
-  , charset
 
   -- ** Content-Type values
   , contentTypeTextPlain
@@ -175,24 +177,17 @@ parseContentType = do
       fail "\"boundary\" parameter is required for multipart content type"
     else pure $ ContentType typ subtype params
   where
-    param = (,) <$> ci token <* char8 '=' <*> value
-    value = token <|> quotedString
+    param = (,) <$> ci token <* char8 '=' <*> val
+    val = token <|> quotedString
     token = takeWhile1 (\c -> c >= 33 && c <= 126 && notInClass "()<>@,;:\\\"/[]?=" c)
 
--- | Character set of the body.
--- @us-ascii@ if not declared.  No result if unrecognised.
---
-charset :: Fold Headers Charset
-charset = to (fromMaybe "us-ascii" . preview p) . to lookupCharset . folded
-  where
-  p = contentType . ctParameters . rawParameter "charset" . caseInsensitive
-
--- | Decode the message into @Text@.  Fails on unrecognised charset.
---
-charsetDecoded :: Fold ByteEntity TextEntity
-charsetDecoded = to f . folded
-  where
-  f (Message h b) = Message h . ($ b) <$> preview charset h
+instance HasCharset ByteEntity where
+  type Decoded ByteEntity = TextEntity
+  charsetName = to . preview $
+    headers . contentType . ctParameters
+    . rawParameter "charset" . caseInsensitive
+  charsetData = body
+  charsetDecoded = to $ \a -> (\t -> set body t a) <$> view charsetText a
 
 
 -- | @text/plain; charset=us-ascii@
