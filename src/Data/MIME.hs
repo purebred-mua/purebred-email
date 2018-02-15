@@ -74,6 +74,7 @@ import Data.RFC5322
 import Data.RFC5322.Internal
 import Data.MIME.Charset
 import Data.MIME.EncodedWord
+import Data.MIME.Parameter
 import Data.MIME.Types
 import Data.MIME.Base64
 import Data.MIME.QuotedPrintable
@@ -135,12 +136,6 @@ contentTransferEncoding h = lookup (CI.mk v) table
       ]
 
 
-type Parameters = [(CI B.ByteString, B.ByteString)]
-
-parameter :: CI B.ByteString -> Fold Parameters B.ByteString
-parameter = header
-{-# INLINE parameter #-}
-
 caseInsensitive :: CI.FoldCase s => Iso' s (CI s)
 caseInsensitive = iso CI.mk CI.original
 {-# INLINE caseInsensitive #-}
@@ -190,7 +185,7 @@ parseContentType = do
 charset :: Fold Headers Charset
 charset = to (fromMaybe "us-ascii" . preview p) . to lookupCharset . folded
   where
-  p = contentType . ctParameters . parameter "charset" . caseInsensitive
+  p = contentType . ctParameters . rawParameter "charset" . caseInsensitive
 
 -- | Decode the message into @Text@.  Fails on unrecognised charset.
 --

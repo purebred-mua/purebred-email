@@ -30,6 +30,7 @@ library
     , Data.MIME.Charset
     , Data.MIME.EncodedWord
     , Data.MIME.Types
+    , Data.MIME.Parameter
     , Data.MIME.Base64
     , Data.MIME.QuotedPrintable
   other-modules:
