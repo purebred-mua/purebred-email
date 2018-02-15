@@ -44,6 +44,7 @@ import Data.CaseInsensitive (CI, mk)
 import qualified Data.Text as T
 
 import Data.MIME.Charset
+import Data.MIME.Internal
 import Data.RFC5322.Internal (ci)
 
 type Parameters = [(CI B.ByteString, B.ByteString)]
@@ -172,13 +173,3 @@ decodePercent (B.PS sfp soff slen) = unsafeDupablePerformIO $ do
 
       fill dptr (sptr `plusPtr` soff)
   pure $ B.PS dfp 0 <$> result
-
-parseHex :: Word8 -> Maybe Word8
-parseHex c = do
-  let
-    -- to upper
-    c' = if c >= 0x61 && c <= 0x7a then c - 0x20 else c
-  fromIntegral <$> B.findIndex (== c') hexAlphabet
-
-hexAlphabet :: B.ByteString
-hexAlphabet = "0123456789ABCDEF"

@@ -35,6 +35,7 @@ library
     , Data.MIME.QuotedPrintable
   other-modules:
     Data.RFC5322.Internal
+    , Data.MIME.Internal
   -- other-extensions:    
   build-depends:
     base >= 4.8 && < 5
