@@ -16,7 +16,7 @@ import Control.Applicative ((<|>), liftA2, optional)
 import Data.Bifunctor (first)
 import Data.Semigroup ((<>))
 
-import Control.Lens (clonePrism, preview, to, view)
+import Control.Lens (to, clonePrism, review, view)
 import Data.Attoparsec.ByteString
 import Data.Attoparsec.ByteString.Char8 (char8)
 import qualified Data.ByteString as B
@@ -24,8 +24,7 @@ import qualified Data.CaseInsensitive as CI
 import qualified Data.Text as T
 
 import Data.MIME.Charset
-import Data.MIME.Types
-import Data.MIME.Base64
+import Data.MIME.TransferEncoding
 import Data.MIME.QuotedPrintable
 import Data.RFC5322.Internal
 
@@ -35,6 +34,14 @@ data EncodedWord = EncodedWord
   , _encodedWordEncoding :: CI.CI B.ByteString
   , _encodedWordText :: B.ByteString
   }
+
+instance HasTransferEncoding EncodedWord where
+  type TransferDecoded EncodedWord = TransferDecodedEncodedWord
+  transferEncodingName = to _encodedWordEncoding
+  transferEncodedData = to _encodedWordText
+  transferDecoded = to $ \a@(EncodedWord charset lang _ _) ->
+    TransferDecodedEncodedWord charset lang <$> view transferDecodedBytes a
+
 
 data TransferDecodedEncodedWord = TransferDecodedEncodedWord
   { _transDecWordCharset :: CI.CI B.ByteString
@@ -75,36 +82,23 @@ serialiseEncodedWord (EncodedWord charset lang enc s) =
   <> "?" <> CI.original enc <> 
   "?" <> s <> "?="
 
--- | Decode an encoded-word.  If the encoding or is not recognised
--- or if decoding fails, returns the serialised encoded-word.
---
-transferDecodeEncodedWord :: EncodedWord -> Maybe TransferDecodedEncodedWord
-transferDecodeEncodedWord (EncodedWord charset lang encName s) = do
-  enc <- lookup encName encodedWordEncodings
-  TransferDecodedEncodedWord charset lang <$> preview (clonePrism enc) s
-
-
-encodedWordEncodings :: [(CI.CI B.ByteString, EncodedWordEncoding)]
-encodedWordEncodings = [("Q", q), ("B", b)]
-
-b :: EncodedWordEncoding
-b = contentTransferEncodingBase64
-
+transferEncodeEncodedWord :: TransferDecodedEncodedWord -> EncodedWord
+transferEncodeEncodedWord (TransferDecodedEncodedWord charset lang s) =
+  EncodedWord charset lang "Q" (review (clonePrism q) s)
 
 decodeEncodedWords :: B.ByteString -> T.Text
-decodeEncodedWords s = either (const $ decodeLenient s) merge $ do
-  toks <- parseOnly tokens s
-  transferDecTokens <- (traverse . traverse)
-    (maybe (Left "transfer decoding failed") Right . transferDecodeEncodedWord)
-    toks
-  (traverse . traverse)
-    (first show . view charsetDecoded)
-    transferDecTokens
+decodeEncodedWords s =
+  either (const $ decodeLenient s) merge $ fmap (g . f) <$> parseOnly tokens s
   where
     -- parse the ByteString into a series of tokens
     -- of either raw ASCII text, or EncodedWords
-    tokens = liftA2 (:) (Left <$> takeTillString "=?") f
+    tokens = liftA2 (:) (Left <$> takeTillString "=?") more
           <|> ((:[]) . Left <$> takeByteString)
-    f = liftA2 (:) (Right <$> encodedWord <|> pure (Left "=?")) tokens
+    more = liftA2 (:) (Right <$> encodedWord <|> pure (Left "=?")) tokens
+
+    f (Left t) = Left t
+    f (Right w) = first (const $ serialiseEncodedWord w) (view transferDecoded w)
+    g (Left t) = Left t
+    g (Right w) = first (const $ serialiseEncodedWord $ transferEncodeEncodedWord w) (view charsetDecoded w)
 
     merge = foldMap (either decodeLenient id)

@@ -36,7 +36,7 @@ module Data.MIME
   , ByteEntity
   , TextEntity
 
-  , contentTransferDecoded
+  , transferDecoded
   , charsetDecoded
 
   -- * Header processing
@@ -77,9 +77,7 @@ import Data.RFC5322.Internal
 import Data.MIME.Charset
 import Data.MIME.EncodedWord
 import Data.MIME.Parameter
-import Data.MIME.Types
-import Data.MIME.Base64
-import Data.MIME.QuotedPrintable
+import Data.MIME.TransferEncoding
 
 
 -- | Entity is formatted for transfer.  Processing requires
@@ -111,31 +109,16 @@ entities f (Message h a) = case a of
   Multipart bs ->
     Message h . Multipart <$> sequenceA (entities f <$> bs)
 
--- | Decode an entity according to its Content-Transfer-Encoding
---
-contentTransferDecoded :: Fold WireEntity ByteEntity
-contentTransferDecoded = to f . folded
-  where
-  f (Message h b) =
-    contentTransferEncoding h
-    >>= fmap (Message h) . (`preview` b) . clonePrism
+contentTransferEncoding :: Getter Headers TransferEncodingName
+contentTransferEncoding = to $
+  fromMaybe "7bit"
+  . preview (header "content-transfer-encoding" . caseInsensitive)
 
-
--- | Get the Content-Transfer-Encoding for an entity.
--- Defaults to @7bit@ (RFC 2045 §6.1) if the header is
--- not present.  Fails on /unrecognised/ values.
---
-contentTransferEncoding :: Headers -> Maybe ContentTransferEncoding
-contentTransferEncoding h = lookup (CI.mk v) table
-  where
-    v = fromMaybe "7bit" $ preview (header "content-transfer-encoding") h
-    table =
-      [ ("7bit", id)
-      , ("8bit", id)
-      , ("binary", id)
-      , ("quoted-printable", contentTransferEncodingQuotedPrintable)
-      , ("base64", contentTransferEncodingBase64)
-      ]
+instance HasTransferEncoding WireEntity where
+  type TransferDecoded WireEntity = ByteEntity
+  transferEncodingName = headers . contentTransferEncoding
+  transferEncodedData = body
+  transferDecoded = to $ \a -> (\t -> set body t a) <$> view transferDecodedBytes a
 
 
 caseInsensitive :: CI.FoldCase s => Iso' s (CI s)
@@ -217,11 +200,13 @@ contentTypeApplicationOctetStream =
 -- <https://tools.ietf.org/html/rfc2049#section-2>.
 --
 contentType :: Getter Headers ContentType
-contentType = to $ \h -> case contentTransferEncoding h of
+contentType = to $ \h -> case view cte h of
   Nothing -> contentTypeApplicationOctetStream
   Just _ ->
     fromMaybe defaultContentType $
     preview (header "content-type" . parsed parseContentType) h
+  where
+    cte = contentTransferEncoding . to (`lookup` transferEncodings)
 
 
 -- | Top-level MIME body parser that uses headers to decide how to

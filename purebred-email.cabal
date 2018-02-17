@@ -31,6 +31,7 @@ library
     , Data.MIME.EncodedWord
     , Data.MIME.Types
     , Data.MIME.Parameter
+    , Data.MIME.TransferEncoding
     , Data.MIME.Base64
     , Data.MIME.QuotedPrintable
   other-modules:
