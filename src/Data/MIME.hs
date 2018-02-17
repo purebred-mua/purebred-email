@@ -57,6 +57,7 @@ module Data.MIME
 
   -- * Re-exports
   , module Data.RFC5322
+  , module Data.MIME.Error
   ) where
 
 import Control.Applicative
@@ -74,6 +75,7 @@ import qualified Data.Text as T
 
 import Data.RFC5322
 import Data.RFC5322.Internal
+import Data.MIME.Error
 import Data.MIME.Charset
 import Data.MIME.EncodedWord
 import Data.MIME.Parameter
