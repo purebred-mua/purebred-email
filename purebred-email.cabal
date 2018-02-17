@@ -27,6 +27,7 @@ library
   exposed-modules:
     Data.RFC5322
     , Data.MIME
+    , Data.MIME.Error
     , Data.MIME.Charset
     , Data.MIME.EncodedWord
     , Data.MIME.Types

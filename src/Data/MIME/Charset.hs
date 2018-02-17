@@ -1,3 +1,4 @@
+{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TypeFamilies #-}
 
@@ -15,14 +16,15 @@ Recognised charsets:
 module Data.MIME.Charset
   (
     HasCharset(..)
+  , CharsetName
   , charsetText
   , CharsetError(..)
-  , CharsetName
+  , AsCharsetError(..)
 
   , decodeLenient
   ) where
 
-import Control.Lens (Getter, to, view)
+import Control.Lens (Getter, Prism', prism', review, to, view)
 import qualified Data.ByteString as B
 import qualified Data.CaseInsensitive as CI
 import qualified Data.Text as T
@@ -40,6 +42,26 @@ data CharsetError
   | CharsetDecodeError CharsetName B.ByteString
   deriving (Show)
 
+class AsCharsetError s where
+  _CharsetError :: Prism' s CharsetError
+  _CharsetUnspecified :: Prism' s ()
+  _CharsetUnsupported :: Prism' s CharsetName
+  _CharsetDecodeError :: Prism' s (CharsetName, B.ByteString)
+
+  _CharsetUnspecified = _CharsetError . _CharsetUnspecified
+  _CharsetUnsupported = _CharsetError . _CharsetUnsupported
+  _CharsetDecodeError = _CharsetError . _CharsetDecodeError
+
+instance AsCharsetError CharsetError where
+  _CharsetError = id
+  _CharsetUnspecified = prism' (const CharsetUnspecified) $ \case
+      CharsetUnspecified -> Just () ; _ -> Nothing
+  _CharsetUnsupported = prism' CharsetUnsupported $ \case
+      CharsetUnsupported k -> Just k ; _ -> Nothing
+  _CharsetDecodeError = prism' (uncurry CharsetDecodeError) $ \case
+      CharsetDecodeError k s -> Just (k, s) ; _ -> Nothing
+
+
 class HasCharset a where
   type Decoded a
 
@@ -51,14 +73,14 @@ class HasCharset a where
   charsetData :: Getter a B.ByteString
 
   -- | Structure with the encoded data replaced with 'Text'
-  charsetDecoded :: Getter a (Either CharsetError (Decoded a))
+  charsetDecoded :: AsCharsetError e => Getter a (Either e (Decoded a))
 
 
 -- | Decode the object according to the declared charset.
-charsetText :: HasCharset a => Getter a (Either CharsetError T.Text)
+charsetText :: (HasCharset a, AsCharsetError e) => Getter a (Either e T.Text)
 charsetText = to $ \a ->
-  maybe (Left CharsetUnspecified) Right (view charsetName a)
-  >>= \k -> maybe (Left $ CharsetUnsupported k) Right (lookupCharset k)
+  maybe (Left $ review _CharsetUnspecified ()) Right (view charsetName a)
+  >>= \k -> maybe (Left $ review _CharsetUnsupported k) Right (lookupCharset k)
   >>= \f -> pure (f (view charsetData a))
 
 charsets :: [(CI.CI B.ByteString, Charset)]

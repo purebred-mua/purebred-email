@@ -97,8 +97,12 @@ decodeEncodedWords s =
     more = liftA2 (:) (Right <$> encodedWord <|> pure (Left "=?")) tokens
 
     f (Left t) = Left t
-    f (Right w) = first (const $ serialiseEncodedWord w) (view transferDecoded w)
+    f (Right w) = first
+      (const $ serialiseEncodedWord w :: TransferEncodingError -> B.ByteString)
+      (view transferDecoded w)
     g (Left t) = Left t
-    g (Right w) = first (const $ serialiseEncodedWord $ transferEncodeEncodedWord w) (view charsetDecoded w)
+    g (Right w) = first
+      (const $ serialiseEncodedWord $ transferEncodeEncodedWord w :: CharsetError -> B.ByteString)
+      (view charsetDecoded w)
 
     merge = foldMap (either decodeLenient id)
