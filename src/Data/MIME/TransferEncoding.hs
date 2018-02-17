@@ -30,13 +30,13 @@ type TransferEncoding = APrism' B.ByteString B.ByteString
 
 data TransferEncodingError
   = TransferEncodingUnsupported TransferEncodingName
-  | TransferDecodeError TransferEncodingName B.ByteString
+  | TransferDecodeError TransferEncodingName
   deriving (Show)
 
 class AsTransferEncodingError s where
   _TransferEncodingError :: Prism' s TransferEncodingError
   _TransferEncodingUnsupported :: Prism' s TransferEncodingName
-  _TransferDecodeError :: Prism' s (TransferEncodingName, B.ByteString)
+  _TransferDecodeError :: Prism' s TransferEncodingName
 
   _TransferEncodingUnsupported = _TransferEncodingError . _TransferEncodingUnsupported
   _TransferDecodeError = _TransferEncodingError . _TransferDecodeError
@@ -45,8 +45,8 @@ instance AsTransferEncodingError TransferEncodingError where
   _TransferEncodingError = id
   _TransferEncodingUnsupported = prism' TransferEncodingUnsupported $ \case
       TransferEncodingUnsupported k -> Just k ; _ -> Nothing
-  _TransferDecodeError = prism' (uncurry TransferDecodeError) $ \case
-      TransferDecodeError k s -> Just (k, s) ; _ -> Nothing
+  _TransferDecodeError = prism' TransferDecodeError $ \case
+      TransferDecodeError k -> Just k ; _ -> Nothing
 
 
 class HasTransferEncoding a where
@@ -70,7 +70,7 @@ transferDecodedBytes = to $ \a -> do
   enc <- maybe (Left $ review _TransferEncodingUnsupported encName) Right
     (lookup encName transferEncodings)
   let s = view transferEncodedData a
-  maybe (Left $ review _TransferDecodeError (encName, s)) Right (preview (clonePrism enc) s)
+  maybe (Left $ review _TransferDecodeError encName) Right (preview (clonePrism enc) s)
 
 -- Message instance:
     --v = fromMaybe "7bit" $ preview (header "content-transfer-encoding") h

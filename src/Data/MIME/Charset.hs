@@ -39,14 +39,14 @@ type Charset = B.ByteString -> T.Text  -- eventually we might want a prism
 data CharsetError
   = CharsetUnspecified
   | CharsetUnsupported CharsetName
-  | CharsetDecodeError CharsetName B.ByteString
+  | CharsetDecodeError CharsetName
   deriving (Show)
 
 class AsCharsetError s where
   _CharsetError :: Prism' s CharsetError
   _CharsetUnspecified :: Prism' s ()
   _CharsetUnsupported :: Prism' s CharsetName
-  _CharsetDecodeError :: Prism' s (CharsetName, B.ByteString)
+  _CharsetDecodeError :: Prism' s CharsetName
 
   _CharsetUnspecified = _CharsetError . _CharsetUnspecified
   _CharsetUnsupported = _CharsetError . _CharsetUnsupported
@@ -58,8 +58,8 @@ instance AsCharsetError CharsetError where
       CharsetUnspecified -> Just () ; _ -> Nothing
   _CharsetUnsupported = prism' CharsetUnsupported $ \case
       CharsetUnsupported k -> Just k ; _ -> Nothing
-  _CharsetDecodeError = prism' (uncurry CharsetDecodeError) $ \case
-      CharsetDecodeError k s -> Just (k, s) ; _ -> Nothing
+  _CharsetDecodeError = prism' CharsetDecodeError $ \case
+      CharsetDecodeError k -> Just k ; _ -> Nothing
 
 
 class HasCharset a where
