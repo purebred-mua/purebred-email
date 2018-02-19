@@ -18,6 +18,7 @@ module Data.MIME.Charset
     HasCharset(..)
   , CharsetName
   , charsetText
+  , charsetText'
   , CharsetError(..)
   , AsCharsetError(..)
 
@@ -82,6 +83,10 @@ charsetText = to $ \a ->
   maybe (Left $ review _CharsetUnspecified ()) Right (view charsetName a)
   >>= \k -> maybe (Left $ review _CharsetUnsupported k) Right (lookupCharset k)
   >>= \f -> pure (f (view charsetData a))
+
+-- | Monomorphic in error type
+charsetText' :: (HasCharset a) => Getter a (Either CharsetError T.Text)
+charsetText' = charsetText
 
 charsets :: [(CI.CI B.ByteString, Charset)]
 charsets =

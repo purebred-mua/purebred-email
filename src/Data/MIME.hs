@@ -50,6 +50,14 @@ module Data.MIME
   , ctEq
   , contentType
 
+  -- * Content-Disposition header
+  , ContentDisposition(..)
+  , DispositionType(..)
+  , dispositionType
+  , dispositionParameters
+  , contentDisposition
+  , filename
+
   -- ** Content-Type values
   , contentTypeTextPlain
   , contentTypeApplicationOctetStream
@@ -155,16 +163,23 @@ parseContentType = do
   typ <- ci token
   _ <- char8 '/'
   subtype <- ci token
-  params <- many (char8 ';' *> skipWhile (== 32 {-SP-}) *> param)
+  params <- parseParameters
   if typ == "multipart" && "boundary" `notElem` fmap fst params
     then
       -- https://tools.ietf.org/html/rfc2046#section-5.1.1
       fail "\"boundary\" parameter is required for multipart content type"
     else pure $ ContentType typ subtype params
+
+parseParameters :: Parser Parameters
+parseParameters = many (char8 ';' *> skipWhile (== 32 {-SP-}) *> param)
   where
     param = (,) <$> ci token <* char8 '=' <*> val
     val = token <|> quotedString
-    token = takeWhile1 (\c -> c >= 33 && c <= 126 && notInClass "()<>@,;:\\\"/[]?=" c)
+
+-- | header token parser
+token :: Parser B.ByteString
+token =
+  takeWhile1 (\c -> c >= 33 && c <= 126 && notInClass "()<>@,;:\\\"/[]?=" c)
 
 instance HasCharset ByteEntity where
   type Decoded ByteEntity = TextEntity
@@ -209,6 +224,49 @@ contentType = to $ \h -> case view cte h of
     preview (header "content-type" . parsed parseContentType) h
   where
     cte = contentTransferEncoding . to (`lookup` transferEncodings)
+
+
+-- | Content-Disposition (RFC 2183).
+--
+-- RFC 2183 §2.8 states: Unrecognized disposition
+--    types should be treated as /attachment/.
+-- 'DispositionType' is a total sum.
+--
+data ContentDisposition = ContentDisposition
+  DispositionType   -- disposition
+  Parameters        -- parameters
+  deriving (Show)
+
+data DispositionType = Inline | Attachment
+  deriving (Show)
+
+dispositionType :: Lens' ContentDisposition DispositionType
+dispositionType f (ContentDisposition a b) =
+  fmap (\a' -> ContentDisposition a' b) (f a)
+{-# ANN dispositionType ("HLint: ignore Avoid lambda" :: String) #-}
+
+dispositionParameters :: Lens' ContentDisposition Parameters
+dispositionParameters f (ContentDisposition a b) =
+  fmap (\b' -> ContentDisposition a b') (f b)
+{-# ANN dispositionParameters ("HLint: ignore Avoid lambda" :: String) #-}
+
+-- | Parser for Content-Type header
+parseContentDisposition :: Parser ContentDisposition
+parseContentDisposition = ContentDisposition
+  <$> (mapDispType <$> ci token)
+  <*> parseParameters
+  where
+    mapDispType s
+      | s == "inline" = Inline
+      | otherwise = Attachment
+
+contentDisposition :: Fold Headers ContentDisposition
+contentDisposition =
+  header "content-disposition" . parsed parseContentDisposition
+
+filename :: Fold ContentDisposition T.Text
+filename =
+  dispositionParameters . parameter "filename" . charsetText' . folded
 
 
 -- | Top-level MIME body parser that uses headers to decide how to
