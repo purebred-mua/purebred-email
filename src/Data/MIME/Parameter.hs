@@ -26,6 +26,7 @@ module Data.MIME.Parameter
   , ParameterValue
   , value
 
+  , HasParameters(..)
   ) where
 
 import Control.Applicative ((<|>), optional)
@@ -35,7 +36,7 @@ import Data.Word (Word8)
 import Foreign (withForeignPtr, plusPtr, minusPtr, peek, peekByteOff, poke)
 import System.IO.Unsafe (unsafeDupablePerformIO)
 
-import Control.Lens (Fold, Lens, _2, filtered, folded, set, to, view)
+import Control.Lens (Fold, Lens, Lens', _2, filtered, folded, set, to, view)
 import Data.Attoparsec.ByteString.Char8
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Internal as B
@@ -173,3 +174,6 @@ decodePercent (B.PS sfp soff slen) = unsafeDupablePerformIO $ do
 
       fill dptr (sptr `plusPtr` soff)
   pure $ B.PS dfp 0 <$> result
+
+class HasParameters a where
+  parameters :: Lens' a Parameters

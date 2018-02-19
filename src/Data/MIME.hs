@@ -157,6 +157,9 @@ ctParameters :: Lens' ContentType [(CI B.ByteString, B.ByteString)]
 ctParameters f (ContentType a b c) = fmap (\c' -> ContentType a b c') (f c)
 {-# ANN ctParameters ("HLint: ignore Avoid lambda" :: String) #-}
 
+instance HasParameters ContentType where
+  parameters = ctParameters
+
 -- | Parser for Content-Type header
 parseContentType :: Parser ContentType
 parseContentType = do
@@ -184,7 +187,7 @@ token =
 instance HasCharset ByteEntity where
   type Decoded ByteEntity = TextEntity
   charsetName = to . preview $
-    headers . contentType . ctParameters
+    headers . contentType . parameters
     . rawParameter "charset" . caseInsensitive
   charsetData = body
   charsetDecoded = to $ \a -> (\t -> set body t a) <$> view charsetText a
@@ -193,7 +196,7 @@ instance HasCharset ByteEntity where
 -- | @text/plain; charset=us-ascii@
 defaultContentType :: ContentType
 defaultContentType =
-  over ctParameters (("charset", "us-ascii"):)
+  over parameters (("charset", "us-ascii"):)
   contentTypeTextPlain
 
 -- | @text/plain@
@@ -250,6 +253,9 @@ dispositionParameters f (ContentDisposition a b) =
   fmap (\b' -> ContentDisposition a b') (f b)
 {-# ANN dispositionParameters ("HLint: ignore Avoid lambda" :: String) #-}
 
+instance HasParameters ContentDisposition where
+  parameters = dispositionParameters
+
 -- | Parser for Content-Type header
 parseContentDisposition :: Parser ContentDisposition
 parseContentDisposition = ContentDisposition
@@ -265,8 +271,7 @@ contentDisposition =
   header "content-disposition" . parsed parseContentDisposition
 
 filename :: Fold ContentDisposition T.Text
-filename =
-  dispositionParameters . parameter "filename" . charsetText' . folded
+filename = parameters . parameter "filename" . charsetText' . folded
 
 
 -- | Top-level MIME body parser that uses headers to decide how to
@@ -292,7 +297,7 @@ mime'
   -> Parser MIME
 mime' takeTillEnd h = case view contentType h of
   ct | view ctType ct == "multipart" ->
-    case preview (ctParameters . header "boundary") ct of
+    case preview (parameters . rawParameter "boundary") ct of
       Nothing -> part
       Just boundary -> Multipart <$> multipart takeTillEnd boundary
   _ -> part
