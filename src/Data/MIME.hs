@@ -32,6 +32,7 @@ module Data.MIME
   , MIMEMessage
 
   , entities
+  , attachments
   , WireEntity
   , ByteEntity
   , TextEntity
@@ -118,6 +119,11 @@ entities f (Message h a) = case a of
     (\(Message h' b') -> Message h' (Part b')) <$> f (Message h b)
   Multipart bs ->
     Message h . Multipart <$> sequenceA (entities f <$> bs)
+
+-- | Leaf entities with @Content-Disposition: attachment@
+attachments :: Fold MIMEMessage WireEntity
+attachments = entities . filtered (notNullOf l) where
+  l = headers . contentDisposition . dispositionType . filtered (== Attachment)
 
 contentTransferEncoding :: Getter Headers TransferEncodingName
 contentTransferEncoding = to $
@@ -241,7 +247,7 @@ data ContentDisposition = ContentDisposition
   deriving (Show)
 
 data DispositionType = Inline | Attachment
-  deriving (Show)
+  deriving (Eq, Show)
 
 dispositionType :: Lens' ContentDisposition DispositionType
 dispositionType f (ContentDisposition a b) =
