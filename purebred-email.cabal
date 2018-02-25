@@ -61,6 +61,7 @@ test-suite tests
   main-is: Test.hs
   other-modules:
     ContentTransferEncodings
+    , Headers
   build-depends:
     base
     , bytestring
@@ -69,6 +70,8 @@ test-suite tests
 
     , tasty
     , tasty-quickcheck
+    , tasty-hunit
+    , attoparsec
     , QuickCheck
     , quickcheck-instances
 

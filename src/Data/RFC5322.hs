@@ -61,6 +61,12 @@ module Data.RFC5322
   , body
   , Headers
   , header
+  , Address(..)
+  , address
+  , AddrSpec(..)
+  , Domain(..)
+  , Mailbox(..)
+  , mailbox
 
   -- * Parsers
   , parse
@@ -73,14 +79,18 @@ import Control.Applicative
 import Control.Monad (void)
 import Data.Word (Word8)
 
+import Data.List.NonEmpty (NonEmpty)
 import Control.Lens
 import Control.Lens.Cons.Extras (recons)
 import Data.Attoparsec.ByteString as A hiding (parse)
 import Data.Attoparsec.ByteString.Char8 (char8)
 import qualified Data.Attoparsec.ByteString.Lazy as AL
 import qualified Data.ByteString as B
+import qualified Data.ByteString.Char8 as Char8
+import qualified Data.Text as T
 
 import Data.RFC5322.Internal
+import Data.MIME.Charset (decodeLenient)
 
 type Headers = [(CI B.ByteString, B.ByteString)]
 
@@ -124,7 +134,90 @@ special = satisfy isSpecial
 atext :: Parser Word8
 atext = satisfy isAtext
 
+
+-- §3.4 Address Specification
+data Mailbox =
+    Mailbox (Maybe T.Text {- display name -})
+             AddrSpec
+    deriving (Show,Eq)
+
+mailbox :: Parser Mailbox
+mailbox = Mailbox <$> optional displayName <*> angleAddr
+          <|> Mailbox Nothing <$> addressSpec
+
+displayName :: Parser T.Text
+displayName = decodeLenient <$> phrase
+
+word :: Parser B.ByteString
+word = atom <|> quotedString
+
+phrase :: Parser B.ByteString
+phrase = foldMany1 word
+
+angleAddr :: Parser AddrSpec
+angleAddr = optionalCFWS *>
+  char8 '<' *> addressSpec <* char8 '>'
+  <* optionalCFWS
+
+atom :: Parser B.ByteString
+atom = optionalCFWS *> foldMany1 (B.singleton <$> atext) <* optionalCFWS
+
+dotAtomText :: Parser B.ByteString
+dotAtomText = takeWhile1 isAtext <<>> foldMany (char8 '.' *> (Char8.cons '.' <$> takeWhile1 isAtext))
+
+dotAtom :: Parser B.ByteString
+dotAtom = optionalCFWS *> dotAtomText <* optionalCFWS
+
+data AddrSpec =
+    AddrSpec B.ByteString {- local part -}
+             Domain
+    deriving (Show,Eq)
+
+data Domain
+    = DomainDotAtom (NonEmpty B.ByteString {- printable ascii -})
+    | DomainLiteral B.ByteString
+    deriving (Show,Eq)
+
+addressSpec :: Parser AddrSpec
+addressSpec = AddrSpec <$> localPart <*> (char8 '@' *> domain)
+
+localPart :: Parser B.ByteString
+localPart = dotAtom <|> quotedString
+
+-- | Printable US-ASCII excl "[", "]", or "\"
+isDtext :: Word8 -> Bool
+isDtext c = (c >= 33 && c <= 90) || (c >= 94 && c <= 126)
+
+dText :: Parser Word8
+dText = satisfy isDtext
+
+domainLiteral :: Parser B.ByteString
+domainLiteral =
+  optionalCFWS *> char8 '['
+  *> foldMany (optionalFWS <<>> (B.singleton <$> dText) <<>> optionalFWS)
+  <* char8 ']' <* optionalFWS
+
+domain :: Parser Domain
+domain = (DomainDotAtom <$> (pure <$> dotAtom))
+         <|> (DomainLiteral <$> domainLiteral)
+
+data Address
+    = Single Mailbox
+    | Group T.Text {- display name -}
+            [Mailbox]
+    deriving (Show,Eq)
+
+mailboxList :: Parser [Mailbox]
+mailboxList = mailbox `sepBy` char8 ','
+
+group :: Parser Address
+group = Group <$> displayName <* char8 ':' <*> mailboxList <* char8 ';' <* optionalCFWS
+
+address :: Parser Address
+address = group <|> Single <$> mailbox
+
 -- §3.5.  Overall Message Syntax
+
 
 -- | Parse a message, given function from headers to body parser
 --
@@ -185,7 +278,10 @@ quotedString =
   <* dquote <* optionalCFWS
   where
     qtext c = c == 33 || (c >= 35 && c <= 91) || (c >= 93 && c <= 126)
-    qcontent = B.singleton <$> satisfy qtext -- FIXME <|> quoted-pair
+    qcontent = B.singleton <$> satisfy qtext <|> B.singleton <$> quotedPair
+
+quotedPair :: Parser Word8
+quotedPair = char8 '\\' *> (vchar <|> wsp)
 
 dquote :: Parser Word8
 dquote = char8 '"'
