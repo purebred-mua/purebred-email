@@ -12,6 +12,45 @@ the input and massage it to be RFC 5322 compliant.
 This parser allows LF line endings in addition to CRLF (RFC 5322
 demands CRLF but LF-only is common in on-disk formats).
 
+The main parsing function is 'message'.  It takes a second function
+that can inspect the headers to determine how to parse the body.
+
+@
+'message' :: ('Headers' -> Parser a) -> Parser (Message ctx a)
+@
+
+The 'Message' type is parameterised over the body type, and a
+phantom type that can be used for context.
+
+@
+data 'Message' ctx a = Message 'Headers' a
+@
+
+Headers and body can be accessed via the 'headers', 'header' and
+'body' optics.
+
+@
+'headers' :: Lens' (Message ctx a) Headers
+'header' :: CI B.ByteString -> Fold Headers B.ByteString
+'body' :: Lens (Message ctx a) (Message ctx' b) a b
+@
+
+The following example program parses an input, interpreting the body
+as a raw @ByteString@, and prints the subject (if present), the
+number of headers and the body length.  The message context type is
+@()@.
+
+@
+analyse :: B.ByteString -> IO ()
+analyse input =
+  case 'parse' ('message' (const takeByteString)) of
+    Left errMsg -> hPutStrLn stderr errMsg *> exitFailure
+    Right (msg :: Message () B.ByteString) -> do
+      B.putStrLn $ "subject: " <> foldOf ('headers' . 'header' "subject") msg
+      putStrLn $ "num headers: " <> show (length (view 'headers' msg))
+      putStrLn $ "body length: " <> show (B.length (view 'body' msg))
+@
+
 -}
 module Data.RFC5322
   (

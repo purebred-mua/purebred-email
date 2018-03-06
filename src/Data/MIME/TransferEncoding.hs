@@ -55,13 +55,13 @@ class HasTransferEncoding a where
   -- | Get the declared or default transfer encoding name.
   transferEncodingName :: Getter a TransferEncodingName
 
-  -- | Return the encoded data in the structure
+  -- | Return the encoded data in the structure.
   transferEncodedData :: Getter a B.ByteString
 
-  -- | Structure with the encoded data replaced with 'Text'
+  -- | Perform content transfer decoding.
   transferDecoded :: AsTransferEncodingError e => Getter a (Either e (TransferDecoded a))
 
--- | Decode the object according to the declared charset.
+-- | Decode the object according to the declared content transfer encoding.
 transferDecodedBytes
   :: (HasTransferEncoding a, AsTransferEncodingError e)
   => Getter a (Either e B.ByteString)

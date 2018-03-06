@@ -86,6 +86,33 @@ transferEncodeEncodedWord :: TransferDecodedEncodedWord -> EncodedWord
 transferEncodeEncodedWord (TransferDecodedEncodedWord charset lang s) =
   EncodedWord charset lang "Q" (review (clonePrism q) s)
 
+-- | RFC 2047 and RFC 2231 define the /encoded-words/ mechanism for
+-- embedding non-ASCII data in headers.  This function locates
+-- encoded-words and decodes them.
+--
+-- @
+-- λ> T.putStrLn $ decodeEncodedWords "hello =?utf-8?B?5LiW55WM?=!"
+-- hello 世界!
+-- @
+--
+-- If parsing fails or the encoding is unrecognised the encoded-word
+-- is left unchanged in the result.
+--
+-- @
+-- λ> T.putStrLn $ decodeEncodedWords "=?utf-8?B?bogus?="
+-- =?utf-8?B?bogus?=
+--
+-- λ> T.putStrLn $ decodeEncodedWords "=?utf-8?X?unrecognised_encoding?="
+-- =?utf-8?X?unrecognised_encoding?=
+-- @
+--
+-- Language specification is supported (the datum is discarded).
+--
+-- @
+-- λ> T.putStrLn $ decodeEncodedWords "=?utf-8*es?Q?hola_mundo!?="
+-- hola mundo!
+-- @
+--
 decodeEncodedWords :: B.ByteString -> T.Text
 decodeEncodedWords s =
   either (const $ decodeLenient s) merge $ fmap (g . f) <$> parseOnly tokens s
