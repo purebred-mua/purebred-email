@@ -74,7 +74,7 @@ isSpecial :: Word8 -> Bool
 isSpecial = inClass "()<>[]:;@\\,.\""
 
 isAtext :: Word8 -> Bool
-isAtext = inClass "A-Za-z0-9!#$%&'*+-/=?^_`{|}~"
+isAtext = inClass "-A-Za-z0-9!#$%&'*+/=?^_`{|}~"
 
 isWsp :: Word8 -> Bool
 isWsp = inClass "\t "
