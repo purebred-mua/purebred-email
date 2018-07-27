@@ -33,6 +33,7 @@ module Data.MIME
   -- *** Accessing and processing entities
   , entities
   , attachments
+  , isAttachment
   , transferDecoded
   , charsetDecoded
 
@@ -46,10 +47,13 @@ module Data.MIME
   , ctSubtype
   , matchContentType
   , ctEq
+  , parseContentType
+  , showContentType
 
   -- *** Content-Type values
   , contentTypeTextPlain
   , contentTypeApplicationOctetStream
+  , contentTypeMultipartMixed
   , defaultContentType
 
   -- ** Content-Disposition header
@@ -58,6 +62,18 @@ module Data.MIME
   , DispositionType(..)
   , dispositionType
   , filename
+
+  -- ** Serialisation
+  , MakeHeader(..)
+  , renderMail
+  , mimeBoundary
+  , mimeHeader
+  -- ** Mail creation
+  , createMessage
+  , createAttachment
+  , createAttachmentFromFile
+  , createTextPlainMessage
+  , createMultipartMixedMessage
 
   -- * Re-exports
   , module Data.RFC5322
@@ -84,6 +100,7 @@ import Data.MIME.Charset
 import Data.MIME.EncodedWord
 import Data.MIME.Parameter
 import Data.MIME.TransferEncoding
+import Data.MIME.Types (Encoding(..))
 
 {- $overview
 
@@ -198,7 +215,7 @@ type TextEntity = Message () T.Text
 data MIME
   = Part B.ByteString
   | Multipart [MIMEMessage]
-  deriving (Show)
+  deriving (Show, Eq)
 
 -- | Get all leaf entities from the MIME message
 --
@@ -214,6 +231,10 @@ attachments :: Fold MIMEMessage WireEntity
 attachments = entities . filtered (notNullOf l) where
   l = headers . contentDisposition . dispositionType . filtered (== Attachment)
 
+-- | MIMEMessage content disposition is an 'Attachment'
+isAttachment :: MIMEMessage -> Bool
+isAttachment = has (headers . contentDisposition . dispositionType . filtered (== Attachment))
+
 contentTransferEncoding :: Getter Headers TransferEncodingName
 contentTransferEncoding = to $
   fromMaybe "7bit"
@@ -225,6 +246,9 @@ instance HasTransferEncoding WireEntity where
   transferEncodedData = body
   transferDecoded = to $ \a -> (\t -> set body t a) <$> view transferDecodedBytes a
 
+instance MakeHeader Encoding where
+  toHeader Base64 = (CI.mk "Content-Transfer-Encoding", "base64")
+  toHeader None = (CI.mk "Content-Transfer-Encoding", "7bit")
 
 caseInsensitive :: CI.FoldCase s => Iso' s (CI s)
 caseInsensitive = iso CI.mk CI.original
@@ -268,6 +292,16 @@ ctSubtype f (ContentType a b c) = fmap (\b' -> ContentType a b' c) (f b)
 ctParameters :: Lens' ContentType [(CI B.ByteString, B.ByteString)]
 ctParameters f (ContentType a b c) = fmap (\c' -> ContentType a b c') (f c)
 {-# ANN ctParameters ("HLint: ignore Avoid lambda" :: String) #-}
+
+-- | Rendered content type field value for displaying
+showContentType :: ContentType -> T.Text
+showContentType = decodeLenient . snd . toHeader
+
+instance MakeHeader ContentType where
+  toHeader ct =
+    let typ = CI.original (view ctType ct) <> "/" <> CI.original (view ctSubtype ct)
+        renderedParameters = foldl (\acc (k,v) -> acc <> "; " <> CI.original k <> "=" <> v) B.empty (view ctParameters ct)
+    in (CI.mk "Content-Type", typ <> renderedParameters)
 
 instance HasParameters ContentType where
   parameters = ctParameters
@@ -367,6 +401,12 @@ contentTypeApplicationOctetStream :: ContentType
 contentTypeApplicationOctetStream =
   ContentType "application" "octet-stream" []
 
+-- | @multipart/mixed; boundary=asdf
+contentTypeMultipartMixed :: B.ByteString -> ContentType
+contentTypeMultipartMixed boundary =
+  over parameters (("boundary", boundary):)
+  $ ContentType "multipart" "mixed" []
+
 -- | Get the content-type header.
 --
 -- If the header is not specified or is syntactically invalid,
@@ -412,6 +452,14 @@ dispositionParameters f (ContentDisposition a b) =
 instance HasParameters ContentDisposition where
   parameters = dispositionParameters
 
+instance MakeHeader ContentDisposition where
+  toHeader disposition =
+    let typ = view dispositionType disposition
+        renderedType Attachment = "attachment"
+        renderedType Inline = "inline"
+        renderedParameters = foldl (\acc (k,v) -> acc <> "; " <> CI.original k <> "=\"" <> v <> "\"") B.empty (view dispositionParameters disposition)
+    in (CI.mk "Content-Disposition", renderedType typ <> renderedParameters)
+
 -- | Parser for Content-Disposition header
 --
 -- Unrecognised disposition types are coerced to @Attachment@
@@ -442,6 +490,10 @@ contentDisposition =
 filename :: Fold ContentDisposition T.Text
 filename = parameters . parameter "filename" . charsetText' . folded
 
+
+-- | Get the boundary, if specified
+mimeBoundary :: Fold ContentType B.ByteString
+mimeBoundary = parameters . rawParameter "boundary"
 
 -- | Top-level MIME body parser that uses headers to decide how to
 --   parse the body.
@@ -500,3 +552,70 @@ multipart takeTillEnd boundary =
       skipTillString dashBoundary *> crlf -- FIXME transport-padding
       *> part `sepBy` crlf
       <* string "--" <* crlf <* void takeTillEnd
+
+-- | Serialisation
+
+class MakeHeader a where
+  toHeader :: a -> (CI B.ByteString, B.ByteString)
+
+renderMail :: MIMEMessage -> B.ByteString
+renderMail (Message h (Part partbody)) =
+    renderFields h <> "\n" <> partbody
+renderMail (Message h (Multipart xs)) =
+    let b = firstOf (contentType . mimeBoundary) h
+        boundaryEnd = maybe B.empty (\b' -> B.concat ["\n--", b', "--\n"])
+        boundaryBegin = maybe B.empty (\b' -> B.concat ["\n--", b', "\n"])
+        allBodies =
+            foldl
+                (\rendered part ->
+                      B.concat
+                          [ rendered
+                          , boundaryBegin b
+                          , renderMail part
+                          ])
+                B.empty
+                xs
+    in renderFields h <> B.concat [allBodies, boundaryEnd b]
+
+mimeHeader :: (CI B.ByteString, B.ByteString)
+mimeHeader = (CI.mk "MIME-Version", "1.0")
+
+createMessage
+    :: ContentType
+    -> ContentDisposition
+    -> Encoding
+    -> B.ByteString -- ^ content
+    -> MIMEMessage
+createMessage ct cd encoding content =
+  let m = Message [] (Part $ transferEncodeData encoding content)
+  in m & over headers (\h -> mimeHeader
+                        : toHeader ct
+                        : toHeader cd
+                        : toHeader encoding
+                        : h)
+
+createMultipartMixedMessage :: Headers  -- ^ From, To, Subject headers
+                            -> B.ByteString -- ^ Boundary
+                            -> [MIMEMessage] -- ^ attachments
+                            -> MIMEMessage
+createMultipartMixedMessage hdrs b attachments' =
+  let ct = ContentType "multipart" "mixed" [(CI.mk "boundary", b)]
+  in over headers (\x -> toHeader ct : mimeHeader : x)
+     $ Message hdrs (Multipart attachments')
+
+createTextPlainMessage :: B.ByteString -> MIMEMessage
+createTextPlainMessage =
+    createMessage
+        contentTypeTextPlain
+        (ContentDisposition Inline [(CI.mk "charset", "utf-8")])
+        None
+
+createAttachmentFromFile :: ContentType -> FilePath -> IO MIMEMessage
+createAttachmentFromFile ct fp = B.readFile fp >>= pure . createAttachment ct fp
+
+createAttachment :: ContentType -> FilePath -> B.ByteString -> MIMEMessage
+createAttachment ct fp =
+    createMessage
+        ct
+        (ContentDisposition Attachment [(CI.mk "filename", C8.pack fp)])
+        Base64

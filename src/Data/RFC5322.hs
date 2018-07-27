@@ -73,11 +73,17 @@ module Data.RFC5322
   , parsed
   , crlf
   , quotedString
+  , field
+
+  -- * Rendering
+  , renderFields
+  , renderField
   ) where
 
 import Control.Applicative
 import Control.Monad (void)
 import Data.Word (Word8)
+import Data.Semigroup ((<>))
 
 import Data.List.NonEmpty (NonEmpty)
 import Control.Lens
@@ -104,7 +110,7 @@ header k = folded . filtered ((k ==) . fst) . _2
 -- messages.
 --
 data Message s a = Message Headers a
-  deriving (Show)
+  deriving (Show, Eq)
 
 headers :: Lens' (Message s a) Headers
 headers f (Message h b) = fmap (\h' -> Message h' b) (f h)
@@ -230,12 +236,27 @@ message f = fields >>= \hdrs -> Message hdrs <$> (crlf *> f hdrs)
 fields :: Parser Headers
 fields = many field
 
+-- | Render all headers
+renderFields :: Headers -> B.ByteString
+renderFields = foldl (\acc h -> acc <> renderField h) B.empty
+
+renderField :: (CI B.ByteString, B.ByteString) -> B.ByteString
+renderField (k,v) =
+    let key = original k
+        kLength = B.length key
+    in B.concat [key, ": ", foldUnstructured kLength v, "\n"]
+
 -- | SP or TAB
 wsp :: Parser Word8
 wsp = satisfy isWsp
 
 
 -- §3.2.2.  Folding White Space and Comments
+--
+-- "The general rule is that wherever this specification allows for folding
+-- white space (not simply WSP characters), a CRLF may be inserted before any
+-- WSP."
+
 
 fws :: Parser B.ByteString
 fws = optional (A.takeWhile isWsp *> crlf) *> takeWhile1 isWsp *> pure " "
@@ -268,6 +289,30 @@ cfws =
 optionalCFWS :: Parser B.ByteString
 optionalCFWS = cfws <|> pure mempty
 
+
+-- | Render a field body with proper folding
+--
+-- Algorithm:
+-- * Break the string on white space
+-- * Use a counter which indicates a new folding line if it exceeds 77 characters
+-- * Whenever we create a new line, concatenate all words back with white space and push it into the result
+-- * The result is a list of byte strings, which is concatenated with \r\n\s
+--
+-- Notes:
+--  * First take at this, so possibly very inefficient
+--  * Assumes that we strip of a whitespace, so attaches an additional
+--    whitespace when joining
+--
+foldUnstructured :: Int -> B.ByteString -> B.ByteString
+foldUnstructured i b =
+    let xs = chunk (i + 2) (Char8.words b) [] []
+    in B.intercalate "\r\n " xs
+
+chunk :: Int -> [B.ByteString] -> [B.ByteString] -> [B.ByteString] -> [B.ByteString]
+chunk _ [] xs result = result <> [Char8.unwords xs]
+chunk max' (x:rest) xs result = if (max' + B.length x + 1) >= 77
+                                then result <> [Char8.unwords xs] <> chunk (B.length x + 1) rest [x] []
+                                else result <> chunk (max' + B.length x + 1) rest (xs <> [x]) result
 
 -- §3.2.4.  Quoted Strings
 
