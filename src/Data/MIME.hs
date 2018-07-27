@@ -34,6 +34,7 @@ module Data.MIME
   -- *** Accessing and processing entities
   , entities
   , attachments
+  , isAttachment
   , transferDecoded
   , charsetDecoded
 
@@ -47,10 +48,14 @@ module Data.MIME
   , ctSubtype
   , matchContentType
   , ctEq
+  , parseContentType
+  , showContentType
+  , mimeBoundary
 
   -- *** Content-Type values
   , contentTypeTextPlain
   , contentTypeApplicationOctetStream
+  , contentTypeMultipartMixed
   , defaultContentType
 
   -- ** Content-Disposition header
@@ -60,6 +65,21 @@ module Data.MIME
   , dispositionType
   , filename
   , filenameParameter
+
+  -- ** Serialisation
+  , renderMessage
+  , buildMessage
+
+  -- ** Mail creation
+  , headerFrom
+  , headerTo
+  , headerCC
+  , headerBCC
+  , headerDate
+  , createAttachmentFromFile
+  , createAttachment
+  , createTextPlainMessage
+  , createMultipartMixedMessage
 
   -- * Re-exports
   , module Data.RFC5322
@@ -77,9 +97,13 @@ import Data.Attoparsec.ByteString
 import Data.Attoparsec.ByteString.Char8 (char8)
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Char8 as C8
+import qualified Data.ByteString.Builder as Builder
+import Data.ByteString.Lazy (toStrict)
 import qualified Data.CaseInsensitive as CI
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
+import Data.Time.Clock (UTCTime)
+import Data.Time.Format (defaultTimeLocale, parseTimeOrError)
 
 import Data.RFC5322
 import Data.RFC5322.Internal
@@ -88,6 +112,7 @@ import Data.MIME.Charset
 import Data.MIME.EncodedWord
 import Data.MIME.Parameter
 import Data.MIME.TransferEncoding
+import Data.MIME.Types (Encoding(..))
 
 {- $overview
 
@@ -178,6 +203,11 @@ getAttachments = toListOf ('attachments' . to (liftA2 (,) content name)
   name = preview ('headers' . 'contentDisposition' . 'filename')
 @
 
+Create an inline, plain text message and render it:
+
+@
+renderMessage $ createTextPlainMessage "This is a test body"
+@
 -}
 
 
@@ -218,6 +248,10 @@ attachments :: Traversal' MIMEMessage WireEntity
 attachments = entities . filtered (notNullOf l) where
   l = headers . contentDisposition . dispositionType . filtered (== Attachment)
 
+-- | MIMEMessage content disposition is an 'Attachment'
+isAttachment :: MIMEMessage -> Bool
+isAttachment = has (headers . contentDisposition . dispositionType . filtered (== Attachment))
+
 contentTransferEncoding :: Getter Headers TransferEncodingName
 contentTransferEncoding = to $
   fromMaybe "7bit"
@@ -229,6 +263,9 @@ instance HasTransferEncoding WireEntity where
   transferEncodedData = body
   transferDecoded = to $ \a -> (\t -> set body t a) <$> view transferDecodedBytes a
 
+printContentTransferEncoding :: Encoding -> B.ByteString
+printContentTransferEncoding Base64 = "base64"
+printContentTransferEncoding None = "7bit"
 
 caseInsensitive :: CI.FoldCase s => Iso' s (CI s)
 caseInsensitive = iso CI.mk CI.original
@@ -288,6 +325,10 @@ ctSubtype f (ContentType a b c) = fmap (\b' -> ContentType a b' c) (f b)
 ctParameters :: Lens' ContentType Parameters
 ctParameters f (ContentType a b c) = fmap (\c' -> ContentType a b c') (f c)
 {-# ANN ctParameters ("HLint: ignore Avoid lambda" :: String) #-}
+
+-- | Rendered content type field value for displaying
+showContentType :: ContentType -> T.Text
+showContentType = decodeLenient . printContentType
 
 instance HasParameters ContentType where
   parameters = ctParameters
@@ -398,6 +439,12 @@ contentTypeApplicationOctetStream :: ContentType
 contentTypeApplicationOctetStream =
   ContentType "application" "octet-stream" (Parameters [])
 
+-- | @multipart/mixed; boundary=asdf@
+contentTypeMultipartMixed :: B.ByteString -> ContentType
+contentTypeMultipartMixed boundary =
+  over parameterList (("boundary", boundary):)
+  $ ContentType "multipart" "mixed" (Parameters [])
+
 -- | Lens to the content-type header.  Probably not a lawful lens.
 --
 -- If the header is not specified or is syntactically invalid,
@@ -501,6 +548,10 @@ filenameParameter :: HasParameters a => Lens' a (Maybe EncodedParameterValue)
 filenameParameter = parameter "filename"
 
 
+-- | Get the boundary, if specified
+mimeBoundary :: Fold ContentType B.ByteString
+mimeBoundary = parameters . rawParameter "boundary"
+
 -- | Top-level MIME body parser that uses headers to decide how to
 --   parse the body.
 --
@@ -558,3 +609,139 @@ multipart takeTillEnd boundary =
       skipTillString dashBoundary *> crlf -- FIXME transport-padding
       *> part `sepBy` crlf
       <* string "--" <* crlf <* void takeTillEnd
+
+-- | Serialise a given `MIMEMessage` into a ByteString. The message is
+-- serialised as is. No additional headers are set.
+renderMessage :: MIMEMessage -> B.ByteString
+renderMessage = toStrict . Builder.toLazyByteString . buildMessage
+
+-- | Serialise a given `MIMEMessage` using a `Builder`
+buildMessage :: MIMEMessage -> Builder.Builder
+buildMessage (Message h (Part partbody)) =
+    mconcat [buildFields h, "\n", Builder.byteString partbody]
+buildMessage (Message h (Multipart xs)) =
+    let b = firstOf (contentType . mimeBoundary) h
+        boundaryEnd = maybe mempty (
+          \b' -> mconcat ["\n--", Builder.byteString b', "--\n"])
+        boundaryBegin = maybe mempty (
+          \b' -> mconcat ["\n--", Builder.byteString b', "\n"])
+        allBodies =
+            foldl
+                (\acc part ->
+                      mconcat
+                          [ acc
+                          , boundaryBegin b
+                          , buildMessage part
+                          ])
+                mempty
+                xs
+    in buildFields h <> mconcat [allBodies, boundaryEnd b]
+
+
+mimeHeader :: (CI B.ByteString, B.ByteString)
+mimeHeader = (CI.mk "MIME-Version", "1.0")
+
+-- | creates a new `MIMEMessage` and transfer encodes the given content with the
+-- given Encoding
+createMessage
+    :: ContentType
+    -> ContentDisposition
+    -> Encoding
+    -> B.ByteString -- ^ content
+    -> MIMEMessage
+createMessage ct cd encoding content =
+  let m = Message (Headers [mimeHeader]) (Part $ transferEncodeData encoding content)
+  in m
+  & set (headers . at "Content-Type") (Just (printContentType ct))
+  . set (headers . at "Content-Disposition") (Just (printContentDisposition cd))
+  . set (headers . at "Content-Transfer-Encoding") (Just (printContentTransferEncoding encoding))
+
+headerFrom :: Lens' Headers [Mailbox]
+headerFrom = lens getter setter
+  where
+    getter = either (pure []) id . parseOnly mailboxList . view (header "from")
+    setter = flip $ set (header "from") . renderMailboxes
+
+headerTo :: Lens' Headers [Address]
+headerTo = lens (headerGetter "to") (headerSetter "to")
+
+headerCC :: Lens' Headers [Address]
+headerCC = lens (headerGetter "cc") (headerSetter "cc")
+
+headerBCC :: Lens' Headers [Address]
+headerBCC = lens (headerGetter "bcc") (headerSetter "bcc")
+
+headerSetter :: CI B.ByteString -> Headers -> [Address] -> Headers
+headerSetter fieldname = flip $ set (header fieldname) . renderAddresses
+
+headerGetter :: CI C8.ByteString -> Headers -> [Address]
+headerGetter fieldname =
+    either (pure []) id . parseOnly addressList . view (header fieldname)
+
+headerDate :: Lens' Headers UTCTime
+headerDate = lens getter setter
+  where
+    -- TODO for parseTimeOrError. See #16
+    getter =
+        parseTimeOrError True defaultTimeLocale rfc5422DateTimeFormat
+        . C8.unpack . view (header "date")
+    setter hdrs x = set (header "date") (renderRFC5422Date x) hdrs
+
+-- | Create a mixed `MIMEMessage` with an inline text/plain part and multiple
+-- `attachments`
+--
+-- Additional headers can be set (e.g. 'cc') by using `At` and `Ixed`, for
+-- example:
+--
+-- @
+-- λ> set (at "subject") (Just "Hey there") $ Headers []
+-- Headers [("subject", "Hey there")]
+-- @
+--
+-- You can also use the `Mailbox` instances:
+--
+-- @
+-- λ> let address = Mailbox (Just "roman") (AddrSpec "roman" (DomainLiteral "192.168.1.1"))
+-- λ> set (at "cc") (Just $ renderMailbox address) $ Headers []
+-- Headers [("cc", "\\"roman\\" <roman@192.168.1.1>")]
+-- @
+createMultipartMixedMessage
+    :: B.ByteString -- ^ Boundary
+    -> [MIMEMessage] -- ^ attachments
+    -> MIMEMessage
+createMultipartMixedMessage b attachments' =
+    let hdrs =
+            set
+                (at "Content-Type")
+                (Just $ printContentType (contentTypeMultipartMixed b)) $
+            Headers [mimeHeader]
+    in Message hdrs (Multipart attachments')
+
+-- | Create an inline, text/plain, utf-8 encoded message
+--
+createTextPlainMessage
+    :: T.Text -- ^ message body
+    -> MIMEMessage
+createTextPlainMessage =
+    createMessage
+        contentTypeTextPlain
+        (ContentDisposition Inline $ Parameters [(CI.mk "charset", "utf-8")])
+        None
+    . T.encodeUtf8
+
+-- | Create an attachment from a given file path.
+-- Note: The filename content disposition is set to the given `FilePath`. For
+-- privacy reasons, you can unset/change it. See `filename` for examples.
+--
+createAttachmentFromFile :: ContentType -> FilePath -> IO MIMEMessage
+createAttachmentFromFile ct fp = createAttachment ct (Just fp) <$> B.readFile fp
+
+-- | Create an attachment from the given file contents. Optionally set the given
+-- filename parameter to the given file path.
+--
+createAttachment :: ContentType -> Maybe FilePath -> B.ByteString -> MIMEMessage
+createAttachment ct fp =
+    set
+        (headers . contentDisposition . filenameParameter)
+        (newParameter . T.pack <$> fp) .
+    createMessage ct (ContentDisposition Attachment $ Parameters []) Base64

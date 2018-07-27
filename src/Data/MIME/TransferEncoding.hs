@@ -13,8 +13,10 @@ module Data.MIME.TransferEncoding
   , TransferEncodingName
   , transferDecodedBytes
   , transferEncodings
+  , transferEncodeData
   , TransferEncodingError(..)
   , AsTransferEncodingError(..)
+  , TransferEncoding
   ) where
 
 import Control.Lens
@@ -24,6 +26,7 @@ import qualified Data.CaseInsensitive as CI
 
 import Data.MIME.Base64
 import Data.MIME.QuotedPrintable
+import Data.MIME.Types (Encoding(..))
 
 type TransferEncodingName = CI.CI B.ByteString
 type TransferEncoding = APrism' B.ByteString B.ByteString
@@ -89,3 +92,7 @@ transferEncodings =
   , ("q", q)
   , ("b", contentTransferEncodingBase64)
   ]
+
+transferEncodeData :: Encoding -> B.ByteString -> B.ByteString
+transferEncodeData Base64 = contentTransferEncodeBase64
+transferEncodeData _ = id

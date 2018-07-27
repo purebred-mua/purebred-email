@@ -65,6 +65,7 @@ library
     , semigroups >= 0.16 && < 0.19
     , stringsearch >= 0.3
     , text >= 1.2
+    , time
   hs-source-dirs:      src
   default-language:    Haskell2010
   ghc-options: -Wall
@@ -78,6 +79,7 @@ test-suite tests
     ContentTransferEncodings
     , Headers
     , MIME
+    , Generator
   build-depends:
     base
     , bytestring
@@ -88,9 +90,13 @@ test-suite tests
     , tasty
     , tasty-quickcheck
     , tasty-hunit
+    , tasty-golden
     , attoparsec
     , QuickCheck
     , quickcheck-instances
+    , case-insensitive >= 1.2 && < 1.3
+    , semigroups >= 0.16
+    , time
 
 executable purebred-email-parse
   default-language:    Haskell2010

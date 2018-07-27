@@ -62,9 +62,11 @@ module Data.RFC5322
   , headerList
   , body
   , Headers(..)
+  , Header
   , header
   , Address(..)
   , address
+  , addressList
   , AddrSpec(..)
   , Domain(..)
   , Mailbox(..)
@@ -81,10 +83,17 @@ module Data.RFC5322
   -- * Helpers
   , isVchar
   , isQtext
+  , field
+  , rfc5422DateTimeFormat
 
   -- * Serialisation
+  , renderRFC5422Date
+  , buildFields
+  , buildField
   , renderMailbox
   , renderMailboxes
+  , renderAddress
+  , renderAddresses
   ) where
 
 import Control.Applicative
@@ -105,11 +114,14 @@ import qualified Data.ByteString.Char8 as Char8
 import qualified Data.ByteString.Builder as Builder
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
+import Data.Time.Clock (UTCTime)
+import Data.Time.Format (defaultTimeLocale, formatTime)
 
 import Data.RFC5322.Internal
 import Data.MIME.Charset (decodeLenient)
 
-newtype Headers = Headers [(CI B.ByteString, B.ByteString)]
+type Header = (CI B.ByteString, B.ByteString)
+newtype Headers = Headers [Header]
   deriving (Eq, Show)
 
 type instance Index Headers = CI B.ByteString
@@ -180,6 +192,14 @@ special = satisfy isSpecial
 atext :: Parser Word8
 atext = satisfy isAtext
 
+
+-- §3.3  Date and Time Specification
+-- Sat, 29 Sep 2018 12:51:05 +1000
+rfc5422DateTimeFormat :: String
+rfc5422DateTimeFormat = "%a, %d %b %Y %T %z"
+
+renderRFC5422Date :: UTCTime -> B.ByteString
+renderRFC5422Date = Char8.pack . formatTime defaultTimeLocale rfc5422DateTimeFormat
 
 -- §3.4 Address Specification
 data Mailbox =
@@ -296,6 +316,16 @@ data Address
 mailboxList :: Parser [Mailbox]
 mailboxList = mailbox `sepBy` char8 ','
 
+renderAddresses :: [Address] -> B.ByteString
+renderAddresses xs = B.intercalate ", " $ renderAddress <$> xs
+
+renderAddress :: Address -> B.ByteString
+renderAddress (Single m) = renderMailbox m
+renderAddress (Group name xs) = T.encodeUtf8 name <> ":" <> renderMailboxes xs <> ";"
+
+addressList :: Parser [Address]
+addressList = address `sepBy` char8 ','
+
 group :: Parser Address
 group = Group <$> displayName <* char8 ':' <*> mailboxList <* char8 ';' <* optionalCFWS
 
@@ -316,12 +346,31 @@ message f = fields >>= \hdrs -> Message hdrs <$> (crlf *> f hdrs)
 fields :: Parser Headers
 fields = Headers <$> many field
 
+-- Header serialisation
+buildFields :: Headers -> Builder.Builder
+buildFields = foldlOf (hdriso . traversed) (\acc h -> acc <> buildField h) mempty
+
+buildField :: (CI B.ByteString, B.ByteString) -> Builder.Builder
+buildField (k,v) =
+    let key = original k
+        kLength = B.length key
+    in mconcat
+           [ Builder.byteString key
+           , ": "
+           , Builder.byteString $ foldUnstructured kLength v
+           , "\n"]
+
 -- | SP or TAB
 wsp :: Parser Word8
 wsp = satisfy isWsp
 
 
 -- §3.2.2.  Folding White Space and Comments
+--
+-- "The general rule is that wherever this specification allows for folding
+-- white space (not simply WSP characters), a CRLF may be inserted before any
+-- WSP."
+
 
 fws :: Parser B.ByteString
 fws = optional (A.takeWhile isWsp *> crlf) *> takeWhile1 isWsp *> pure " "
@@ -354,6 +403,31 @@ cfws =
 optionalCFWS :: Parser B.ByteString
 optionalCFWS = cfws <|> pure mempty
 
+
+-- | Render a field body with proper folding
+--
+-- Algorithm:
+-- * Break the string on white space
+-- * Use a counter which indicates a new folding line if it exceeds 77 characters
+-- * Whenever we create a new line, concatenate all words back with white space and push it into the result
+-- * The result is a list of byte strings, which is concatenated with \r\n\s
+--
+-- Notes:
+--  * First take at this, so possibly very inefficient
+--  * No other delimiters (e.g. commas, full stops, etc) are considered for
+--    folding other than whitespace
+--  * Attaches an additional whitespace when joining
+--
+foldUnstructured :: Int -> B.ByteString -> B.ByteString
+foldUnstructured i b =
+    let xs = chunk (i + 2) (Char8.words b) [] []
+    in B.intercalate "\r\n " xs
+
+chunk :: Int -> [B.ByteString] -> [B.ByteString] -> [B.ByteString] -> [B.ByteString]
+chunk _ [] xs result = result <> [Char8.unwords xs]
+chunk max' (x:rest) xs result = if (max' + B.length x + 1) >= 77
+                                then result <> [Char8.unwords xs] <> chunk (B.length x + 1) rest [x] []
+                                else result <> chunk (max' + B.length x + 1) rest (xs <> [x]) result
 
 -- §3.2.4.  Quoted Strings
 

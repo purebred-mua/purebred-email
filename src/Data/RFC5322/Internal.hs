@@ -5,6 +5,7 @@ module Data.RFC5322.Internal
   -- * Case-insensitive value parsers
     ci
   , CI
+  , original
 
   -- * Semigroup and monoid folding combinators
   , (<<>>)
@@ -28,7 +29,7 @@ import Data.Attoparsec.Internal as A
 import qualified Data.Attoparsec.Internal.Types as AT
 import qualified Data.ByteString as B
 import Data.ByteString.Search (indices)
-import Data.CaseInsensitive (CI, FoldCase, mk)
+import Data.CaseInsensitive (CI, FoldCase, mk, original)
 import Data.Foldable (fold)
 import Data.Functor (($>))
 import Data.List.NonEmpty (fromList)
