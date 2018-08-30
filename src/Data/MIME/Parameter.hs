@@ -31,6 +31,7 @@ module Data.MIME.Parameter
 
 import Control.Applicative ((<|>), optional)
 import Data.Foldable (fold)
+import Data.Maybe (fromMaybe)
 import Data.Semigroup ((<>))
 import Data.Word (Word8)
 import Foreign (withForeignPtr, plusPtr, minusPtr, peek, peekByteOff, poke)
@@ -98,9 +99,13 @@ value :: Lens (ParameterValue a) (ParameterValue b) a b
 value f (ParameterValue a b c) = ParameterValue a b <$> f c
 
 
+-- | The default charset @us-ascii@ is implied by the abstract of
+-- RFC 2231 which states: /This memo defines … a means to specify
+-- parameter values in character sets other than US-ASCII/.
+--
 instance HasCharset (ParameterValue B.ByteString) where
   type Decoded (ParameterValue B.ByteString) = ParameterValue T.Text
-  charsetName = to $ \(ParameterValue name _ _) -> name
+  charsetName = to $ \(ParameterValue name _ _) -> fromMaybe "us-ascii" name
   charsetData = value
   charsetDecoded = to $ \a -> (\t -> set value t a) <$> view charsetText a
 

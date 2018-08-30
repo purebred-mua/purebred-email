@@ -51,7 +51,7 @@ data TransferDecodedEncodedWord = TransferDecodedEncodedWord
 
 instance HasCharset TransferDecodedEncodedWord where
   type Decoded TransferDecodedEncodedWord = T.Text
-  charsetName = to (pure . _transDecWordCharset)
+  charsetName = to _transDecWordCharset
   charsetData = to _transDecWordText
   charsetDecoded = charsetText
 

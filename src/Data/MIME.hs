@@ -296,11 +296,15 @@ token :: Parser B.ByteString
 token =
   takeWhile1 (\c -> c >= 33 && c <= 126 && notInClass "()<>@,;:\\\"/[]?=" c)
 
+-- | RFC 2046 §4.1.2. defines the default character set to be US-ASCII.
+--
 instance HasCharset ByteEntity where
   type Decoded ByteEntity = TextEntity
-  charsetName = to . preview $
-    headers . contentType . parameters
-    . rawParameter "charset" . caseInsensitive
+  charsetName =
+    let
+      l = headers . contentType . parameters . rawParameter "charset" . caseInsensitive
+    in
+      to $ fromMaybe "us-ascii" . preview l
   charsetData = body
   charsetDecoded = to $ \a -> (\t -> set body t a) <$> view charsetText a
 
