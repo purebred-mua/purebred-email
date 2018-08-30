@@ -78,6 +78,7 @@ module Data.RFC5322
   -- * Rendering
   , renderFields
   , renderField
+  , renderMailbox
   ) where
 
 import Control.Applicative
@@ -85,15 +86,18 @@ import Control.Monad (void)
 import Data.Word (Word8)
 import Data.Semigroup ((<>))
 
-import Data.List.NonEmpty (NonEmpty)
+import Data.List.NonEmpty (NonEmpty, intersperse)
 import Control.Lens
 import Control.Lens.Cons.Extras (recons)
 import Data.Attoparsec.ByteString as A hiding (parse)
 import Data.Attoparsec.ByteString.Char8 (char8)
 import qualified Data.Attoparsec.ByteString.Lazy as AL
 import qualified Data.ByteString as B
+import Data.ByteString.Lazy (toStrict)
 import qualified Data.ByteString.Char8 as Char8
+import qualified Data.ByteString.Builder as Builder
 import qualified Data.Text as T
+import qualified Data.Text.Encoding as T
 
 import Data.RFC5322.Internal
 import Data.MIME.Charset (decodeLenient)
@@ -147,6 +151,17 @@ data Mailbox =
              AddrSpec
     deriving (Show,Eq)
 
+renderMailbox :: Mailbox -> B.ByteString
+renderMailbox (Mailbox n a) =
+    let name =
+            maybe
+                mempty
+                (\x ->
+                      mconcat ["\"", Builder.byteString $ T.encodeUtf8 x, "\" "])
+                n
+        builder = mconcat [name, "<", renderAddressSpec a, ">"]
+    in toStrict $ Builder.toLazyByteString builder
+
 mailbox :: Parser Mailbox
 mailbox = Mailbox <$> optional displayName <*> angleAddr
           <|> Mailbox Nothing <$> addressSpec
@@ -183,6 +198,16 @@ data Domain
     = DomainDotAtom (NonEmpty B.ByteString {- printable ascii -})
     | DomainLiteral B.ByteString
     deriving (Show,Eq)
+
+renderAddressSpec :: AddrSpec -> Builder.Builder
+renderAddressSpec (AddrSpec lp (DomainDotAtom b)) =
+    mconcat
+        [ Builder.byteString lp
+        , "@"
+        , foldl (\acc x -> acc <> Builder.byteString x) mempty $ intersperse "." b
+        ]
+renderAddressSpec (AddrSpec lp (DomainLiteral b)) =
+    mconcat [Builder.byteString lp, "@", Builder.byteString b]
 
 addressSpec :: Parser AddrSpec
 addressSpec = AddrSpec <$> localPart <*> (char8 '@' *> domain)
