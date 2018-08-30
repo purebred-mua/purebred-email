@@ -69,6 +69,7 @@ module Data.RFC5322
   , Domain(..)
   , Mailbox(..)
   , mailbox
+  , mailboxList
 
   -- * Parsers
   , parse
@@ -80,6 +81,10 @@ module Data.RFC5322
   -- * Helpers
   , isVchar
   , isQtext
+
+  -- * Serialisation
+  , renderMailbox
+  , renderMailboxes
   ) where
 
 import Control.Applicative
@@ -88,15 +93,18 @@ import Data.List (findIndex)
 import Data.Semigroup ((<>))
 import Data.Word (Word8)
 
-import Data.List.NonEmpty (NonEmpty)
+import Data.List.NonEmpty (NonEmpty, intersperse)
 import Control.Lens
 import Control.Lens.Cons.Extras (recons)
 import Data.Attoparsec.ByteString as A hiding (parse, take)
 import Data.Attoparsec.ByteString.Char8 (char8)
 import qualified Data.Attoparsec.ByteString.Lazy as AL
 import qualified Data.ByteString as B
+import Data.ByteString.Lazy (toStrict)
 import qualified Data.ByteString.Char8 as Char8
+import qualified Data.ByteString.Builder as Builder
 import qualified Data.Text as T
+import qualified Data.Text.Encoding as T
 
 import Data.RFC5322.Internal
 import Data.MIME.Charset (decodeLenient)
@@ -179,6 +187,30 @@ data Mailbox =
              AddrSpec
     deriving (Show,Eq)
 
+buildMailbox :: Mailbox -> Builder.Builder
+buildMailbox (Mailbox n a) =
+  maybe a' (\n' -> renderDisplayName n' <> "<" <> a' <> ">") n
+  where
+    a' = renderAddressSpec a
+
+renderDisplayName :: T.Text -> Builder.Builder
+renderDisplayName x =
+    mconcat
+        [ "\""
+        , Builder.byteString (T.encodeUtf8 x)
+        , "\" "]
+
+renderMailboxes :: [Mailbox] -> B.ByteString
+renderMailboxes = toStrict . Builder.toLazyByteString . go
+  where
+    go :: [Mailbox] -> Builder.Builder
+    go [] = mempty
+    go [x] = buildMailbox x
+    go xs = foldr (\x acc -> acc <> mconcat [ ", ", buildMailbox x]) mempty xs
+
+renderMailbox :: Mailbox -> B.ByteString
+renderMailbox = toStrict . Builder.toLazyByteString . buildMailbox
+
 mailbox :: Parser Mailbox
 mailbox = Mailbox <$> optional displayName <*> angleAddr
           <|> Mailbox Nothing <$> addressSpec
@@ -215,6 +247,22 @@ data Domain
     = DomainDotAtom (NonEmpty B.ByteString {- printable ascii -})
     | DomainLiteral B.ByteString
     deriving (Show,Eq)
+
+renderAddressSpec :: AddrSpec -> Builder.Builder
+renderAddressSpec (AddrSpec lp (DomainDotAtom b)) =
+    let buildLP = Builder.byteString lp
+    in mconcat
+           [ if B.isInfixOf " " lp
+                 then mconcat ["\"", buildLP, "\""]
+                 else buildLP
+           , "@"
+           , foldl
+                 (\acc x ->
+                       acc <> Builder.byteString x)
+                 mempty $
+             intersperse "." b]
+renderAddressSpec (AddrSpec lp (DomainLiteral b)) =
+    mconcat [Builder.byteString lp, "@", Builder.byteString b]
 
 addressSpec :: Parser AddrSpec
 addressSpec = AddrSpec <$> localPart <*> (char8 '@' *> domain)
