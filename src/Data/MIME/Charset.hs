@@ -38,20 +38,25 @@ type CharsetName = CI.CI B.ByteString
 type Charset = B.ByteString -> T.Text  -- eventually we might want a prism
 
 data CharsetError
-  = CharsetUnsupported CharsetName
+  = CharsetUnspecified
+  | CharsetUnsupported CharsetName
   | CharsetDecodeError CharsetName
   deriving (Show)
 
 class AsCharsetError s where
   _CharsetError :: Prism' s CharsetError
+  _CharsetUnspecified :: Prism' s ()
   _CharsetUnsupported :: Prism' s CharsetName
   _CharsetDecodeError :: Prism' s CharsetName
 
+  _CharsetUnspecified = _CharsetError . _CharsetUnspecified
   _CharsetUnsupported = _CharsetError . _CharsetUnsupported
   _CharsetDecodeError = _CharsetError . _CharsetDecodeError
 
 instance AsCharsetError CharsetError where
   _CharsetError = id
+  _CharsetUnspecified = prism' (const CharsetUnspecified) $ \case
+      CharsetUnspecified -> Just () ; _ -> Nothing
   _CharsetUnsupported = prism' CharsetUnsupported $ \case
       CharsetUnsupported k -> Just k ; _ -> Nothing
   _CharsetDecodeError = prism' CharsetDecodeError $ \case
@@ -63,7 +68,7 @@ class HasCharset a where
 
   -- | Get the declared (or default) character set name.  There is no guarantee
   -- that it corresponds to a registered or supported charset.
-  charsetName :: Getter a CharsetName
+  charsetName :: Getter a (Maybe CharsetName)
 
   -- | Return the encoded data in the structure
   charsetData :: Getter a B.ByteString
@@ -75,11 +80,10 @@ class HasCharset a where
 -- | Decode the object according to the declared charset.
 charsetText :: (HasCharset a, AsCharsetError e) => Getter a (Either e T.Text)
 charsetText = to $ \a ->
-  let
-    k = view charsetName a
-  in
-    maybe (Left $ review _CharsetUnsupported k) Right (lookupCharset k)
-    >>= \f -> pure (f (view charsetData a))
+  maybe (Left $ review _CharsetUnspecified ()) Right (view charsetName a)
+  >>= \k -> maybe (Left $ review _CharsetUnsupported k) Right (lookupCharset k)
+  >>= \f -> pure (f (view charsetData a))
+
 
 -- | Monomorphic in error type
 charsetText' :: (HasCharset a) => Getter a (Either CharsetError T.Text)

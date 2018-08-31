@@ -300,14 +300,57 @@ token =
 --
 instance HasCharset ByteEntity where
   type Decoded ByteEntity = TextEntity
-  charsetName =
+  charsetName = to $ \ent ->
     let
-      l = headers . contentType . parameters . rawParameter "charset" . caseInsensitive
+      (ContentType typ sub params) = view (headers . contentType) ent
+      source = fromMaybe (InParameter (Just "us-ascii")) . (`lookup` textCharsetSources)
+      l = rawParameter "charset" . caseInsensitive
     in
-      to $ fromMaybe "us-ascii" . preview l
-  charsetData = body
+      if typ == "text"
+      then case source sub of
+        InBand f -> f (view body ent)
+        InParameter def -> preview l params <|> def
+        InBandOrParameter f def -> f (view body ent) <|> preview l params <|> def
+      else
+        preview l params <|> Just "us-ascii"
+  charsetData = body -- XXX: do we need to drop the BOM / encoding decl?
   charsetDecoded = to $ \a -> (\t -> set body t a) <$> view charsetText a
 
+-- | RFC 6657 provides for different media types having different
+-- ways to determine the charset.  This data type defines how a
+-- charset should be determined for some media type.
+--
+data EntityCharsetSource
+  = InBand (B.ByteString -> Maybe CharsetName)
+  -- ^ Charset should be declared within payload (e.g. xml, rtf).
+  --   The given function reads it from the payload.
+  | InParameter (Maybe CharsetName)
+  -- ^ Charset should be declared in the 'charset' parameter,
+  --   with optional fallback to the given default.
+  | InBandOrParameter (B.ByteString -> Maybe CharsetName) (Maybe CharsetName)
+  -- ^ Check in-band first, fall back to 'charset' parameter,
+  --   and further optionally fall back to a default.
+
+-- | Charset sources for text/* media types.  IANA registry:
+-- https://www.iana.org/assignments/media-types/media-types.xhtml#text
+--
+textCharsetSources :: [(CI B.ByteString, EntityCharsetSource)]
+textCharsetSources =
+  [ ("plain", InParameter (Just "us-ascii"))
+  , ("csv", InParameter (Just "utf-8"))
+  , ("rtf", InBand (const (Just "us-ascii" {- TODO -})))
+
+  -- https://tools.ietf.org/html/rfc2854
+  -- The default is ambiguous; using us-ascii for now
+  , ("html", InBandOrParameter (const Nothing {-TODO-}) (Just "us-ascii"))
+
+  -- https://tools.ietf.org/html/rfc7763
+  , ("markdown", InParameter Nothing)
+
+  -- https://tools.ietf.org/html/rfc7303#section-3.2 and
+  -- https://www.w3.org/TR/2008/REC-xml-20081126/#charencoding
+  , ("xml", InBand (const (Just "utf-8") {-TODO-}))
+  ]
 
 -- | @text/plain; charset=us-ascii@
 defaultContentType :: ContentType
@@ -343,7 +386,6 @@ contentType = to $ \h -> case view cte h of
     preview (header "content-type" . parsed parseContentType) h
   where
     cte = contentTransferEncoding . to (`lookup` transferEncodings)
-
 
 -- | Content-Disposition header (RFC 2183).
 --

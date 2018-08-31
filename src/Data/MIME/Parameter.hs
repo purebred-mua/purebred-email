@@ -31,7 +31,6 @@ module Data.MIME.Parameter
 
 import Control.Applicative ((<|>), optional)
 import Data.Foldable (fold)
-import Data.Maybe (fromMaybe)
 import Data.Semigroup ((<>))
 import Data.Word (Word8)
 import Foreign (withForeignPtr, plusPtr, minusPtr, peek, peekByteOff, poke)
@@ -105,7 +104,7 @@ value f (ParameterValue a b c) = ParameterValue a b <$> f c
 --
 instance HasCharset (ParameterValue B.ByteString) where
   type Decoded (ParameterValue B.ByteString) = ParameterValue T.Text
-  charsetName = to $ \(ParameterValue name _ _) -> fromMaybe "us-ascii" name
+  charsetName = to $ \(ParameterValue name _ _) -> name <|> Just "us-ascii"
   charsetData = value
   charsetDecoded = to $ \a -> (\t -> set value t a) <$> view charsetText a
 
