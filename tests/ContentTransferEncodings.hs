@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RankNTypes #-}
 
@@ -46,7 +47,11 @@ prop_linelength p s =
     encoded = review (clonePrism p) s
     prop = all ((<= 76) . B.length) (splitOnCRLF encoded)
   in
+#if ! MIN_VERSION_QuickCheck(2,12,0)
     cover (B.length encoded > 100) 50 "long output" prop
+#else
+    checkCoverage $ cover 50 (B.length encoded > 100) "long output" prop
+#endif
 
 prop_notElem :: EncodedWordEncoding -> Word8 -> B.ByteString -> Bool
 prop_notElem enc c = B.notElem c . review (clonePrism enc)
