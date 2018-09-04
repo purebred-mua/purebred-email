@@ -1,6 +1,7 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE TypeFamilies #-}
 
 {- |
 
@@ -59,7 +60,7 @@ module Data.RFC5322
   , message
   , headers
   , body
-  , Headers
+  , Headers(..)
   , header
   , Address(..)
   , address
@@ -77,12 +78,14 @@ module Data.RFC5322
 
 import Control.Applicative
 import Control.Monad (void)
+import Data.List (findIndex)
+import Data.Semigroup ((<>))
 import Data.Word (Word8)
 
 import Data.List.NonEmpty (NonEmpty)
 import Control.Lens
 import Control.Lens.Cons.Extras (recons)
-import Data.Attoparsec.ByteString as A hiding (parse)
+import Data.Attoparsec.ByteString as A hiding (parse, take)
 import Data.Attoparsec.ByteString.Char8 (char8)
 import qualified Data.Attoparsec.ByteString.Lazy as AL
 import qualified Data.ByteString as B
@@ -92,11 +95,36 @@ import qualified Data.Text as T
 import Data.RFC5322.Internal
 import Data.MIME.Charset (decodeLenient)
 
-type Headers = [(CI B.ByteString, B.ByteString)]
+newtype Headers = Headers [(CI B.ByteString, B.ByteString)]
+  deriving (Eq, Show)
+
+type instance Index Headers = CI B.ByteString
+type instance IxValue Headers = B.ByteString
+
+instance Ixed Headers where
+  ix = header
+
+hdriso :: Iso' Headers [(CI B.ByteString, B.ByteString)]
+hdriso = iso (\(Headers xs) -> xs) Headers
+
+-- | Acts upon the first occurrence of the header only.
+--
+instance At Headers where
+  at k = hdriso . l
+    where
+    l :: Lens' [(CI B.ByteString, B.ByteString)] (Maybe B.ByteString)
+    l f kv =
+      let
+        i = findIndex ((== k) . fst) kv
+        g Nothing = maybe kv (\j -> take j kv <> drop (j + 1) kv) i
+        g (Just v) = maybe ((k,v):kv) (\j -> set (ix j) (k,v) kv) i
+      in
+        g <$> f (lookup k kv)
+
 
 -- | Get all values of the given header
-header :: CI B.ByteString -> Fold Headers B.ByteString
-header k = folded . filtered ((k ==) . fst) . _2
+header :: CI B.ByteString -> Traversal' Headers B.ByteString
+header k = hdriso . traversed . filtered ((k ==) . fst) . _2
 
 -- | Message type, parameterised over context and body type.  The
 -- context type is not used in this module but is provided for uses
@@ -228,7 +256,7 @@ message :: (Headers -> Parser a) -> Parser (Message s a)
 message f = fields >>= \hdrs -> Message hdrs <$> (crlf *> f hdrs)
 
 fields :: Parser Headers
-fields = many field
+fields = Headers <$> many field
 
 -- | SP or TAB
 wsp :: Parser Word8

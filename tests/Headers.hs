@@ -2,22 +2,22 @@
 {-# LANGUAGE OverloadedStrings #-}
 module Headers where
 
+import Control.Lens
 import qualified Data.ByteString.Char8 as BC
 import Data.Attoparsec.ByteString.Char8 (parseOnly)
 
 import Test.Tasty (TestTree, testGroup)
-import Test.Tasty.HUnit ((@=?), testCase, Assertion)
+import Test.Tasty.HUnit ((@=?), (@?=), testCase, Assertion)
 
 import Data.MIME
 
 
 unittests :: TestTree
-unittests =
-    testGroup
-        "address parsing tests"
-        [ parsesMailboxesSuccessfully
-        , parsesAddressesSuccessfully
-        ]
+unittests = testGroup "Headers"
+  [ parsesMailboxesSuccessfully
+  , parsesAddressesSuccessfully
+  , ixAndAt
+  ]
 
 -- | Note some examples are taken from https://tools.ietf.org/html/rfc3696#section-3
 mailboxes :: [(String, Either String Mailbox -> Assertion, BC.ByteString)]
@@ -85,6 +85,33 @@ addresses =
 
 parsesAddressesSuccessfully :: TestTree
 parsesAddressesSuccessfully =
-    testGroup "parsing mailboxes" $
+    testGroup "parsing addresses" $
     (\(desc,f,input) -> testCase desc $ f (parseOnly address input))
     <$> addresses
+
+-- | Sanity check Ixed and At instances
+ixAndAt :: TestTree
+ixAndAt = testGroup "Ix and At instances"
+  [ testCase "set header" $
+      set (at "content-type") (Just "text/plain") empty @?= textPlain
+  , testCase "set header (multiple)" $
+      set (at "content-type") (Just "text/html") multi
+      @?= Headers [("Content-Type", "text/html"), ("Content-Type", "text/plain")]
+  , testCase "update header (case differs)" $
+      set (at "content-type") (Just "text/html") textPlain @?= textHtml
+  , testCase "delete header (one)" $
+      sans "content-type" textPlain @?= empty
+  , testCase "delete header (one)" $
+      sans "content-type" textPlain @?= empty
+  , testCase "delete header (multiple)" $
+      sans "content-type" multi @?= textPlain
+  , testCase "delete header (no match)" $
+      sans "subject" textPlain @?= textPlain
+  , testCase "ix targets all" $
+      toListOf (ix "content-type") multi @?= ["foo/bar", "text/plain"]
+  ]
+  where
+  empty = Headers []
+  textPlain = Headers [("Content-Type", "text/plain")]
+  textHtml = Headers [("Content-Type", "text/html")]
+  multi = Headers [("Content-Type", "foo/bar"), ("Content-Type", "text/plain")]

@@ -31,6 +31,6 @@ unittests =
     [
       testCase "simple" $
       preview (headers . contentDisposition . filename)
-      (Message [("Content-Disposition", "attachment; filename=foo.pdf")] (Part "foo"))
+      (Message (Headers [("Content-Disposition", "attachment; filename=foo.pdf")]) (Part "foo"))
       @?= Just "foo.pdf"
     ]
