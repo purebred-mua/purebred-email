@@ -9,7 +9,8 @@ Implementation of Base64 Content-Transfer-Encoding.
 -}
 module Data.MIME.Base64
   (
-    contentTransferEncodingBase64
+    contentTransferEncodeBase64
+  , contentTransferEncodingBase64
   ) where
 
 import Control.Lens (prism')
