@@ -1,4 +1,5 @@
 {-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE TypeFamilies #-}
@@ -61,6 +62,7 @@ module Data.MIME
 
   -- * Re-exports
   , module Data.RFC5322
+  , module Data.MIME.Parameter
   , module Data.MIME.Error
   ) where
 
@@ -242,6 +244,14 @@ caseInsensitive = iso CI.mk CI.original
 data ContentType = ContentType (CI B.ByteString) (CI B.ByteString) Parameters
   deriving (Show)
 
+-- | Equality of Content-Type. Type and subtype are compared
+-- case-insensitively and parameters are also compared.  Use
+-- 'matchContentType' if you just want to match on the media type
+-- while ignoring parameters.
+--
+instance Eq ContentType where
+  ContentType a b c == ContentType a' b' c' = a == a' && b == b' && c == c'
+
 -- | Match content type.  If @Nothing@ is given for subtype, any
 -- subtype is accepted.
 --
@@ -252,6 +262,11 @@ matchContentType
   -> Bool
 matchContentType wantType wantSubtype (ContentType gotType gotSubtype _) =
   wantType == gotType && maybe True (== gotSubtype) wantSubtype
+
+printContentType :: ContentType -> B.ByteString
+printContentType (ContentType typ sub params) =
+  CI.original typ <> "/" <> CI.original sub
+  <> foldMap (\(k,v) -> "; " <> CI.original k <> "=" <> v) params
 
 -- | Are the type and subtype the same? (parameters are ignored)
 --
@@ -367,7 +382,7 @@ contentTypeApplicationOctetStream :: ContentType
 contentTypeApplicationOctetStream =
   ContentType "application" "octet-stream" []
 
--- | Get the content-type header.
+-- | Lens to the content-type header.  Probably not a lawful lens.
 --
 -- If the header is not specified or is syntactically invalid,
 -- 'defaultContentType' is used.  For more info see
@@ -378,14 +393,21 @@ contentTypeApplicationOctetStream =
 -- @application/octet-stream@ is returned, as required by
 -- <https://tools.ietf.org/html/rfc2049#section-2>.
 --
-contentType :: Getter Headers ContentType
-contentType = to $ \h -> case view cte h of
-  Nothing -> contentTypeApplicationOctetStream
-  Just _ ->
-    fromMaybe defaultContentType $
-    preview (header "content-type" . parsed parseContentType) h
-  where
-    cte = contentTransferEncoding . to (`lookup` transferEncodings)
+-- When setting, if the header already exists it is replaced,
+-- otherwise it is added.  Unrecognised Content-Transfer-Encoding
+-- is ignored when setting.
+--
+contentType :: Lens' Headers ContentType
+contentType = lens sa sbt where
+  sa s = case view cte s of
+    Nothing -> contentTypeApplicationOctetStream
+    Just _ ->
+      fromMaybe defaultContentType $ preview (ct . parsed parseContentType) s
+
+  sbt s b = set (at "Content-Type") (Just (printContentType b)) s
+
+  ct = header "content-type"
+  cte = contentTransferEncoding . to (`lookup` transferEncodings)
 
 -- | Content-Disposition header (RFC 2183).
 --

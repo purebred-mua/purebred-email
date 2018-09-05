@@ -17,6 +17,7 @@ unittests = testGroup "Headers"
   [ parsesMailboxesSuccessfully
   , parsesAddressesSuccessfully
   , ixAndAt
+  , contentTypeTests
   ]
 
 -- | Note some examples are taken from https://tools.ietf.org/html/rfc3696#section-3
@@ -110,8 +111,30 @@ ixAndAt = testGroup "Ix and At instances"
   , testCase "ix targets all" $
       toListOf (ix "content-type") multi @?= ["foo/bar", "text/plain"]
   ]
+
+
+contentTypeTests :: TestTree
+contentTypeTests = testGroup "Content-Type header"
+  [ testCase "parsing header" $
+      view contentType textHtml @?= ctTextHtml
+  , testCase "no header yields default" $
+      view contentType empty @?= defaultContentType
+  , testCase "set when undefined" $
+      set contentType ctTextHtml empty @?= textHtml
+  , testCase "set when defined (update)" $
+      set contentType ctTextHtml textPlain @?= textHtml
+  , testCase "update undefined content type" $
+      over (contentType . parameters) (("foo","bar"):) empty @?= defaultFoobar
+  , testCase "update defined content type" $
+      over (contentType . parameters) (("foo","bar"):) textHtml @?= textHtmlFoobar
+  ]
   where
-  empty = Headers []
-  textPlain = Headers [("Content-Type", "text/plain")]
-  textHtml = Headers [("Content-Type", "text/html")]
-  multi = Headers [("Content-Type", "foo/bar"), ("Content-Type", "text/plain")]
+  ctTextHtml = ContentType "text" "html" []
+
+empty, textPlain, textHtml, multi, defaultFoobar, textHtmlFoobar :: Headers
+empty = Headers []
+textPlain = Headers [("Content-Type", "text/plain")]
+textHtml = Headers [("Content-Type", "text/html")]
+multi = Headers [("Content-Type", "foo/bar"), ("Content-Type", "text/plain")]
+defaultFoobar = Headers [("Content-Type", "text/plain; foo=bar; charset=us-ascii")]
+textHtmlFoobar = Headers [("Content-Type", "text/html; foo=bar")]
