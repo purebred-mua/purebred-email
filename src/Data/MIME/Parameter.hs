@@ -187,19 +187,6 @@ getParameter k m = do
       Encoded -> decodePercent s
 
 
--- | Get parameter value.  Continuations, encoding and charset
--- are processed.
---
-parameter :: CI B.ByteString -> Traversal' Parameters (ParameterValue B.ByteString)
-parameter k = at k . traversed
-
--- | Raw parameter.  The key is used as-is.  No processing of
--- continuations, encoding or charset is performed.
---
-rawParameter :: CI B.ByteString -> Traversal' Parameters B.ByteString
-rawParameter k = paramiso . traversed . filtered ((k ==) . fst) . _2
-
-
 decodePercent :: B.ByteString -> Maybe B.ByteString
 decodePercent (B.PS sfp soff slen) = unsafeDupablePerformIO $ do
   -- Length of decoded string is not yet known, but it cannot be
@@ -238,6 +225,23 @@ decodePercent (B.PS sfp soff slen) = unsafeDupablePerformIO $ do
 class HasParameters a where
   parameters :: Lens' a Parameters
 
+instance HasParameters Parameters where
+  parameters = id
+
 -- Access the 'Parameters' as a @[(CI B.ByteString, B.ByteString)]@
 parameterList :: HasParameters a => Lens' a RawParameters
 parameterList = parameters . coerced
+
+-- | Access parameter value.  Continuations, encoding and charset
+-- are processed.
+--
+parameter
+  :: HasParameters a
+  => CI B.ByteString -> Lens' a (Maybe (ParameterValue B.ByteString))
+parameter k = parameters . at k
+
+-- | Raw parameter.  The key is used as-is.  No processing of
+-- continuations, encoding or charset is performed.
+--
+rawParameter :: HasParameters a => CI B.ByteString -> Traversal' a B.ByteString
+rawParameter k = parameters . paramiso . traversed . filtered ((k ==) . fst) . _2

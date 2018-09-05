@@ -471,7 +471,7 @@ contentDisposition =
 -- | Get the filename, if specified.
 --
 filename :: Fold ContentDisposition T.Text
-filename = parameters . parameter "filename" . charsetText' . folded
+filename = parameter "filename" . traversed . charsetText' . folded
 
 
 -- | Top-level MIME body parser that uses headers to decide how to
@@ -502,7 +502,7 @@ mime'
   -> Parser MIME
 mime' takeTillEnd h = case view contentType h of
   ct | view ctType ct == "multipart" ->
-    case preview (parameters . rawParameter "boundary") ct of
+    case preview (rawParameter "boundary") ct of
       Nothing -> part
       Just boundary -> Multipart <$> multipart takeTillEnd boundary
   _ -> part

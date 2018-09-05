@@ -143,23 +143,23 @@ textHtmlFoobar = Headers [("Content-Type", "text/html; foo=bar")]
 parameterTests :: TestTree
 parameterTests = testGroup "parameter handling"
   [ testCase "RFC 2231 §3 example" $
-      view (contentType . parameters . at "url")
+      view (contentType . parameter "url")
         (Headers [("Content-Type", "message/external-body; access-type=URL; URL*0=\"ftp://\"; URL*1=\"cs.utk.edu/pub/moore/bulk-mailer/bulk-mailer.tar\"")])
       @?= Just (ParameterValue Nothing Nothing "ftp://cs.utk.edu/pub/moore/bulk-mailer/bulk-mailer.tar")
   , testCase "RFC 2231 §4 example" $
-      view (contentType . parameters . at "title")
+      view (contentType . parameter "title")
         (Headers [("Content-Type", "application/x-stuff; title*=us-ascii'en-us'This%20is%20%2A%2A%2Afun%2A%2A%2A")])
       @?= Just (ParameterValue (Just "us-ascii") (Just "en-us") "This is ***fun***")
   , testCase "RFC 2231 §4.1 example" $
-      view (contentType . parameters . at "title")
+      view (contentType . parameter "title")
         (Headers [("Content-Type", "application/x-stuff; title*0*=us-ascii'en'This%20is%20even%20more%20; title*1*=%2A%2A%2Afun%2A%2A%2A%20; title*2=\"isn't it!\"")])
       @?= Just (ParameterValue (Just "us-ascii") (Just "en") "This is even more ***fun*** isn't it!")
   , testCase "set filename parameter in Content-Disposition" $
-      set (contentDisposition . parameters . at "filename") (Just (ParameterValue Nothing Nothing "foo.pdf"))
+      set (contentDisposition . parameter "filename") (Just (ParameterValue Nothing Nothing "foo.pdf"))
         (Headers [("Content-Disposition", "attachment")])
       @?= Headers [("Content-Disposition", "attachment; filename=foo.pdf")]
   , testCase "unset filename parameter in Content-Disposition" $
-      set (contentDisposition . parameters . at "filename") Nothing
+      set (contentDisposition . parameter "filename") Nothing
         (Headers [("Content-Disposition", "attachment; foo=bar; filename=foo.pdf")])
       @?= Headers [("Content-Disposition", "attachment; foo=bar")]
   ]
