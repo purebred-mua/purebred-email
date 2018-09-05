@@ -19,11 +19,12 @@ This module provides types and functions for working with parameters.
 -}
 module Data.MIME.Parameter
   (
-    Parameters
+    Parameters(..)
+  , parameterList
   , parameter
   , rawParameter
 
-  , ParameterValue
+  , ParameterValue(..)
   , value
 
   , HasParameters(..)
@@ -36,19 +37,72 @@ import Data.Word (Word8)
 import Foreign (withForeignPtr, plusPtr, minusPtr, peek, peekByteOff, poke)
 import System.IO.Unsafe (unsafeDupablePerformIO)
 
-import Control.Lens (Fold, Lens, Lens', _2, filtered, folded, set, to, view)
-import Data.Attoparsec.ByteString.Char8
+import Control.Lens
+import Data.Attoparsec.ByteString.Char8 hiding (take)
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Internal as B
 import qualified Data.ByteString.Char8 as C
-import Data.CaseInsensitive (CI, mk)
+import Data.CaseInsensitive (CI, foldedCase, mk)
 import qualified Data.Text as T
 
 import Data.MIME.Charset
 import Data.MIME.Internal
 import Data.RFC5322.Internal (ci)
 
-type Parameters = [(CI B.ByteString, B.ByteString)]
+type RawParameters = [(CI B.ByteString, B.ByteString)]
+-- | Header parameters.  Used for some headers including Content-Type
+-- and Content-Disposition.  This type handles parameter continuations
+-- and optional charset and language information (RFC 2231).
+--
+newtype Parameters = Parameters [(CI B.ByteString, B.ByteString)]
+  deriving (Eq, Show)
+
+type instance Index Parameters = CI B.ByteString
+type instance IxValue Parameters = ParameterValue B.ByteString
+
+paramiso :: Iso' Parameters [(CI B.ByteString, B.ByteString)]
+paramiso = iso (\(Parameters raw) -> raw) Parameters
+
+-- Traverses 0 or 1 instances of a parameter, which may consist of
+-- one or more raw parameters.
+instance Ixed Parameters where
+  ix k = paramiso . l
+    where
+    l f kv = case getParameter k kv of
+      Nothing -> pure kv
+      Just v -> (\v' -> setParam k v' kv) <$> f v
+
+-- | Set the parameter (which may need to use the parameter
+-- continuation mechanism).
+setParam :: CI B.ByteString -> ParameterValue B.ByteString -> RawParameters -> RawParameters
+setParam k v = (renderParam k v <>) . deleteParam k
+
+-- | Turn a ParameterValue into a list of raw parameters
+--
+-- FIXME: currently does not do continutations etc.
+-- 'ParameterValue' value is used as-is.
+renderParam :: CI B.ByteString -> ParameterValue B.ByteString -> [(CI B.ByteString, B.ByteString)]
+renderParam k (ParameterValue _ _ v) = [(k, v)]
+
+-- | Delete all raw keys that are "part of" the extended/continued
+-- parameter.
+deleteParam :: CI B.ByteString -> RawParameters -> RawParameters
+deleteParam k = filter (not . test . fst)
+  where
+  test x =
+    x == k
+    || (foldedCase k <> "*") `B.isPrefixOf` foldedCase x
+
+instance At Parameters where
+  at k = paramiso . l
+    where
+    l :: Lens' RawParameters (Maybe (ParameterValue B.ByteString))
+    l f kv =
+      let
+        g Nothing = deleteParam k kv
+        g (Just v) = (setParam k v . deleteParam k) kv
+      in
+        g <$> f (getParameter k kv)
 
 data Continued = Continued | NotContinued
   deriving (Show)
@@ -70,7 +124,7 @@ data OtherSection = OtherSection Encoded B.ByteString
 
 initialSection
   :: CI B.ByteString
-  -> Parameters
+  -> RawParameters
   -> Maybe InitialSection
 initialSection k m =
   InitialSection NotContinued NotEncoded <$> lookup k m
@@ -81,7 +135,7 @@ initialSection k m =
 otherSection
   :: CI B.ByteString
   -> Int
-  -> Parameters
+  -> RawParameters
   -> Maybe OtherSection
 otherSection k i m =
   OtherSection NotEncoded <$> lookup (k <> "*" <> i') m
@@ -93,6 +147,7 @@ data ParameterValue a = ParameterValue
   (Maybe (CI B.ByteString))  -- charset
   (Maybe (CI B.ByteString))  -- language
   a                          -- value
+  deriving (Eq, Show)
 
 value :: Lens (ParameterValue a) (ParameterValue b) a b
 value f (ParameterValue a b c) = ParameterValue a b <$> f c
@@ -108,7 +163,7 @@ instance HasCharset (ParameterValue B.ByteString) where
   charsetData = value
   charsetDecoded = to $ \a -> (\t -> set value t a) <$> view charsetText a
 
-getParameter :: CI B.ByteString -> Parameters -> Maybe (ParameterValue B.ByteString)
+getParameter :: CI B.ByteString -> RawParameters -> Maybe (ParameterValue B.ByteString)
 getParameter k m = do
   InitialSection cont enc s <- initialSection k m
   (charset, lang, v0) <-
@@ -135,14 +190,14 @@ getParameter k m = do
 -- | Get parameter value.  Continuations, encoding and charset
 -- are processed.
 --
-parameter :: CI B.ByteString -> Fold Parameters (ParameterValue B.ByteString)
-parameter k = to (getParameter k) . folded
+parameter :: CI B.ByteString -> Traversal' Parameters (ParameterValue B.ByteString)
+parameter k = at k . traversed
 
 -- | Raw parameter.  The key is used as-is.  No processing of
 -- continuations, encoding or charset is performed.
 --
-rawParameter :: CI B.ByteString -> Fold Parameters B.ByteString
-rawParameter k = folded . filtered ((k ==) . fst) . _2
+rawParameter :: CI B.ByteString -> Traversal' Parameters B.ByteString
+rawParameter k = paramiso . traversed . filtered ((k ==) . fst) . _2
 
 
 decodePercent :: B.ByteString -> Maybe B.ByteString
@@ -179,5 +234,10 @@ decodePercent (B.PS sfp soff slen) = unsafeDupablePerformIO $ do
       fill dptr (sptr `plusPtr` soff)
   pure $ B.PS dfp 0 <$> result
 
+-- | Types that have 'Parameters'
 class HasParameters a where
   parameters :: Lens' a Parameters
+
+-- Access the 'Parameters' as a @[(CI B.ByteString, B.ByteString)]@
+parameterList :: HasParameters a => Lens' a RawParameters
+parameterList = parameters . coerced

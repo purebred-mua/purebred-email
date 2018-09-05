@@ -18,6 +18,7 @@ unittests = testGroup "Headers"
   , parsesAddressesSuccessfully
   , ixAndAt
   , contentTypeTests
+  , parameterTests
   ]
 
 -- | Note some examples are taken from https://tools.ietf.org/html/rfc3696#section-3
@@ -124,12 +125,12 @@ contentTypeTests = testGroup "Content-Type header"
   , testCase "set when defined (update)" $
       set contentType ctTextHtml textPlain @?= textHtml
   , testCase "update undefined content type" $
-      over (contentType . parameters) (("foo","bar"):) empty @?= defaultFoobar
+      over (contentType . parameterList) (("foo","bar"):) empty @?= defaultFoobar
   , testCase "update defined content type" $
-      over (contentType . parameters) (("foo","bar"):) textHtml @?= textHtmlFoobar
+      over (contentType . parameterList) (("foo","bar"):) textHtml @?= textHtmlFoobar
   ]
   where
-  ctTextHtml = ContentType "text" "html" []
+  ctTextHtml = ContentType "text" "html" (Parameters [])
 
 empty, textPlain, textHtml, multi, defaultFoobar, textHtmlFoobar :: Headers
 empty = Headers []
@@ -138,3 +139,27 @@ textHtml = Headers [("Content-Type", "text/html")]
 multi = Headers [("Content-Type", "foo/bar"), ("Content-Type", "text/plain")]
 defaultFoobar = Headers [("Content-Type", "text/plain; foo=bar; charset=us-ascii")]
 textHtmlFoobar = Headers [("Content-Type", "text/html; foo=bar")]
+
+parameterTests :: TestTree
+parameterTests = testGroup "parameter handling"
+  [ testCase "RFC 2231 §3 example" $
+      view (contentType . parameters . at "url")
+        (Headers [("Content-Type", "message/external-body; access-type=URL; URL*0=\"ftp://\"; URL*1=\"cs.utk.edu/pub/moore/bulk-mailer/bulk-mailer.tar\"")])
+      @?= Just (ParameterValue Nothing Nothing "ftp://cs.utk.edu/pub/moore/bulk-mailer/bulk-mailer.tar")
+  , testCase "RFC 2231 §4 example" $
+      view (contentType . parameters . at "title")
+        (Headers [("Content-Type", "application/x-stuff; title*=us-ascii'en-us'This%20is%20%2A%2A%2Afun%2A%2A%2A")])
+      @?= Just (ParameterValue (Just "us-ascii") (Just "en-us") "This is ***fun***")
+  , testCase "RFC 2231 §4.1 example" $
+      view (contentType . parameters . at "title")
+        (Headers [("Content-Type", "application/x-stuff; title*0*=us-ascii'en'This%20is%20even%20more%20; title*1*=%2A%2A%2Afun%2A%2A%2A%20; title*2=\"isn't it!\"")])
+      @?= Just (ParameterValue (Just "us-ascii") (Just "en") "This is even more ***fun*** isn't it!")
+  , testCase "set filename parameter in Content-Disposition" $
+      set (contentDisposition . parameters . at "filename") (Just (ParameterValue Nothing Nothing "foo.pdf"))
+        (Headers [("Content-Disposition", "attachment")])
+      @?= Headers [("Content-Disposition", "attachment; filename=foo.pdf")]
+  , testCase "unset filename parameter in Content-Disposition" $
+      set (contentDisposition . parameters . at "filename") Nothing
+        (Headers [("Content-Disposition", "attachment; foo=bar; filename=foo.pdf")])
+      @?= Headers [("Content-Disposition", "attachment; foo=bar")]
+  ]

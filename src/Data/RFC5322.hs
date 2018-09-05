@@ -72,6 +72,7 @@ module Data.RFC5322
   -- * Parsers
   , parse
   , parsed
+  , parsePrint
   , crlf
   , quotedString
   ) where
@@ -342,6 +343,10 @@ vchar = satisfy (\c -> c >= 33 && c <= 126)
 parsed :: (Cons s s Word8 Word8) => Parser a -> Fold s a
 parsed p = to (parse p) . folded
 {-# INLINE parsed #-}
+
+-- | Construct a prism from a parser and a printer
+parsePrint :: Parser a -> (a -> B.ByteString) -> Prism' B.ByteString a
+parsePrint fwd rev = prism' rev (AL.maybeResult . AL.parse fwd . view recons)
 
 -- | Parse an @a@.
 --

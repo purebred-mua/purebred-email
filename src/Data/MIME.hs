@@ -265,8 +265,11 @@ matchContentType wantType wantSubtype (ContentType gotType gotSubtype _) =
 
 printContentType :: ContentType -> B.ByteString
 printContentType (ContentType typ sub params) =
-  CI.original typ <> "/" <> CI.original sub
-  <> foldMap (\(k,v) -> "; " <> CI.original k <> "=" <> v) params
+  CI.original typ <> "/" <> CI.original sub <> printParameters params
+
+printParameters :: Parameters -> B.ByteString
+printParameters (Parameters xs) =
+  foldMap (\(k,v) -> "; " <> CI.original k <> "=" <> v) xs
 
 -- | Are the type and subtype the same? (parameters are ignored)
 --
@@ -280,7 +283,7 @@ ctType f (ContentType a b c) = fmap (\a' -> ContentType a' b c) (f a)
 ctSubtype :: Lens' ContentType (CI B.ByteString)
 ctSubtype f (ContentType a b c) = fmap (\b' -> ContentType a b' c) (f b)
 
-ctParameters :: Lens' ContentType [(CI B.ByteString, B.ByteString)]
+ctParameters :: Lens' ContentType Parameters
 ctParameters f (ContentType a b c) = fmap (\c' -> ContentType a b c') (f c)
 {-# ANN ctParameters ("HLint: ignore Avoid lambda" :: String) #-}
 
@@ -298,9 +301,9 @@ parseContentType = do
     then
       -- https://tools.ietf.org/html/rfc2046#section-5.1.1
       fail "\"boundary\" parameter is required for multipart content type"
-    else pure $ ContentType typ subtype params
+    else pure $ ContentType typ subtype (Parameters params)
 
-parseParameters :: Parser Parameters
+parseParameters :: Parser [(CI B.ByteString, B.ByteString)]
 parseParameters = many (char8 ';' *> skipWhile (== 32 {-SP-}) *> param)
   where
     param = (,) <$> ci token <* char8 '=' <*> val
@@ -370,17 +373,16 @@ textCharsetSources =
 -- | @text/plain; charset=us-ascii@
 defaultContentType :: ContentType
 defaultContentType =
-  over parameters (("charset", "us-ascii"):)
-  contentTypeTextPlain
+  over parameterList (("charset", "us-ascii"):) contentTypeTextPlain
 
 -- | @text/plain@
 contentTypeTextPlain :: ContentType
-contentTypeTextPlain = ContentType "text" "plain" []
+contentTypeTextPlain = ContentType "text" "plain" (Parameters [])
 
 -- | @application/octet-stream@
 contentTypeApplicationOctetStream :: ContentType
 contentTypeApplicationOctetStream =
-  ContentType "application" "octet-stream" []
+  ContentType "application" "octet-stream" (Parameters [])
 
 -- | Lens to the content-type header.  Probably not a lawful lens.
 --
@@ -442,11 +444,17 @@ instance HasParameters ContentDisposition where
 parseContentDisposition :: Parser ContentDisposition
 parseContentDisposition = ContentDisposition
   <$> (mapDispType <$> ci token)
-  <*> parseParameters
+  <*> (Parameters <$> parseParameters)
   where
     mapDispType s
       | s == "inline" = Inline
       | otherwise = Attachment
+
+printContentDisposition :: ContentDisposition -> B.ByteString
+printContentDisposition (ContentDisposition typ params) =
+  typStr <> printParameters params
+  where
+    typStr = case typ of Inline -> "inline" ; Attachment -> "attachment"
 
 -- | Get Content-Disposition header.
 -- Unrecognised disposition types are coerced to @Attachment@
@@ -455,9 +463,10 @@ parseContentDisposition = ContentDisposition
 --
 -- The fold may be empty, e.g. if the header is absent or unparseable.
 --
-contentDisposition :: Fold Headers ContentDisposition
+contentDisposition :: Traversal' Headers ContentDisposition
 contentDisposition =
-  header "content-disposition" . parsed parseContentDisposition
+  header "content-disposition"
+  . parsePrint parseContentDisposition printContentDisposition
 
 -- | Get the filename, if specified.
 --
