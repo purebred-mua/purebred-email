@@ -42,8 +42,9 @@ import Data.Attoparsec.ByteString.Char8 hiding (take)
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Internal as B
 import qualified Data.ByteString.Char8 as C
-import Data.CaseInsensitive (CI, foldedCase, mk)
+import Data.CaseInsensitive (CI, foldedCase, mk, original)
 import qualified Data.Text as T
+import qualified Data.Text.Encoding as T
 
 import Data.MIME.Charset
 import Data.MIME.Internal
@@ -82,7 +83,14 @@ setParam k v = (renderParam k v <>) . deleteParam k
 -- FIXME: currently does not do continutations etc.
 -- 'ParameterValue' value is used as-is.
 renderParam :: CI B.ByteString -> ParameterValue B.ByteString -> [(CI B.ByteString, B.ByteString)]
-renderParam k (ParameterValue _ _ v) = [(k, v)]
+renderParam k pv = case pv of
+  ParameterValue Nothing Nothing v -> case extEncode v of
+    (False, v') -> [(k, v')]
+    (True, v') -> [(k <> "*", "''" <> v')]
+  ParameterValue charset lang v ->
+    [(k <> "*", f charset <> "'" <> f lang <> "'" <> snd (extEncode v))]
+  where
+  f = maybe "" original
 
 -- | Delete all raw keys that are "part of" the extended/continued
 -- parameter.
@@ -157,11 +165,20 @@ value f (ParameterValue a b c) = ParameterValue a b <$> f c
 -- RFC 2231 which states: /This memo defines … a means to specify
 -- parameter values in character sets other than US-ASCII/.
 --
+-- When encoding, 'utf-8' is always used, but if the whole string
+-- contains only ASCII characters then the charset declaration is
+-- omitted (so that it can be encoded as a non-extended parameter).
+--
 instance HasCharset (ParameterValue B.ByteString) where
   type Decoded (ParameterValue B.ByteString) = ParameterValue T.Text
   charsetName = to $ \(ParameterValue name _ _) -> name <|> Just "us-ascii"
   charsetData = value
   charsetDecoded = to $ \a -> (\t -> set value t a) <$> view charsetText a
+  charsetEncode (ParameterValue _ lang s) =
+    let
+      bs = T.encodeUtf8 s
+      charset = if B.all (< 0x80) bs then Nothing else Just "utf-8"
+    in ParameterValue charset lang bs
 
 getParameter :: CI B.ByteString -> RawParameters -> Maybe (ParameterValue B.ByteString)
 getParameter k m = do
@@ -220,6 +237,46 @@ decodePercent (B.PS sfp soff slen) = unsafeDupablePerformIO $ do
 
       fill dptr (sptr `plusPtr` soff)
   pure $ B.PS dfp 0 <$> result
+
+-- | Return the encoded string, and whether percent-encoding was needed.
+extEncode :: B.ByteString -> (Bool, B.ByteString)
+extEncode s@(B.PS sfp soff slen)
+  | slen == dlen = (False, s)
+  | otherwise = (True, d)
+  where
+  -- regular parameter:
+  --  value := token / quoted-string   (RFC 2045)
+  --  token := 1*<any (US-ASCII) CHAR except SPACE, CTLs, or tspecials>
+  --  tspecials :=  "(" / ")" / "<" / ">" / "@" /
+  --                "," / ";" / ":" / "\" / <">
+  --                "/" / "[" / "]" / "?" / "="
+  --
+  -- extended-parameter:
+  --  attribute-char := <any (US-ASCII) CHAR except SPACE, CTLs, "*", "'", "%", or tspecials>
+  --  extended-other-values := *(ext-octet / attribute-char)
+  --  ext-octet := "%" 2(DIGIT / "A" / "B" / "C" / "D" / "E" / "F")
+  isAttrChar c = c > 0x20 && c < 0x80 && c `B.notElem` "()<>@,;:\\\"/[]?=*'%"
+  numEncChars c = if isAttrChar c then 1 else 3
+  dlen = B.foldr' (\c z -> z + numEncChars c) 0 s
+  pokeEncoded ptr c =
+    let (hi, lo) = hexEncode c
+    in poke ptr 37 {- % -} *> poke (ptr `plusPtr` 1) hi *> poke (ptr `plusPtr` 2) lo
+
+  d = unsafeDupablePerformIO $ do
+    dfp <- B.mallocByteString dlen
+    withForeignPtr dfp $ \dptr ->
+      withForeignPtr sfp $ \sptr -> do
+        let
+          slimit = sptr `plusPtr` (soff + slen)
+          fill !dp !sp
+            | sp >= slimit = pure ()
+            | otherwise = do
+              c <- peek sp
+              if isAttrChar c
+                then poke dp c *> fill (dp `plusPtr` 1) (sp `plusPtr` 1)
+                else pokeEncoded dp c *> fill (dp `plusPtr` 3) (sp `plusPtr` 1)
+        fill dptr sptr
+    pure $ B.PS dfp 0 dlen
 
 -- | Types that have 'Parameters'
 class HasParameters a where

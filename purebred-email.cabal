@@ -82,6 +82,7 @@ test-suite tests
     base
     , bytestring
     , lens
+    , text
     , purebred-email
 
     , tasty

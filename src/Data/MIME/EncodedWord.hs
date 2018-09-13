@@ -22,6 +22,7 @@ import Data.Attoparsec.ByteString.Char8 (char8)
 import qualified Data.ByteString as B
 import qualified Data.CaseInsensitive as CI
 import qualified Data.Text as T
+import qualified Data.Text.Encoding as T
 
 import Data.MIME.Charset
 import Data.MIME.TransferEncoding
@@ -49,12 +50,21 @@ data TransferDecodedEncodedWord = TransferDecodedEncodedWord
   , _transDecWordText :: B.ByteString
   }
 
+-- | 'charsetEncode' uses UTF-8, but sets the charset to @us-ascii@
+-- if the text only contains ASCII characters.  No language is set
+-- upon encoding.
+--
 instance HasCharset TransferDecodedEncodedWord where
   type Decoded TransferDecodedEncodedWord = T.Text
   charsetName = to (pure . _transDecWordCharset)
   charsetData = to _transDecWordText
   charsetDecoded = charsetText
 
+  charsetEncode s =
+    let
+      bs = T.encodeUtf8 s
+      charset = if B.all (< 0x80) bs then "us-ascii" else "utf-8"
+    in TransferDecodedEncodedWord charset Nothing bs
 
 -- NOTE: may not be > 75 chars long
 --

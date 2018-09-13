@@ -1,5 +1,6 @@
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeFamilies #-}
 
 {- |
@@ -21,6 +22,7 @@ module Data.MIME.Charset
   , charsetText'
   , CharsetError(..)
   , AsCharsetError(..)
+  , charsetPrism
 
   , decodeLenient
   ) where
@@ -76,6 +78,9 @@ class HasCharset a where
   -- | Structure with the encoded data replaced with 'Text'
   charsetDecoded :: AsCharsetError e => Getter a (Either e (Decoded a))
 
+  -- | Encode the data
+  charsetEncode :: Decoded a -> a
+
 
 -- | Decode the object according to the declared charset.
 charsetText :: (HasCharset a, AsCharsetError e) => Getter a (Either e T.Text)
@@ -84,10 +89,16 @@ charsetText = to $ \a ->
   >>= \k -> maybe (Left $ review _CharsetUnsupported k) Right (lookupCharset k)
   >>= \f -> pure (f (view charsetData a))
 
-
 -- | Monomorphic in error type
 charsetText' :: (HasCharset a) => Getter a (Either CharsetError T.Text)
 charsetText' = charsetText
+
+-- | Prism for charset decoded/encoded data.
+-- Information about decoding failures is discarded.
+charsetPrism :: forall a. (HasCharset a) => Prism' a (Decoded a)
+charsetPrism = prism' charsetEncode (either (const Nothing) Just . view l)
+  where
+  l = charsetDecoded :: Getter a (Either CharsetError (Decoded a))
 
 charsets :: [(CI.CI B.ByteString, Charset)]
 charsets =

@@ -78,6 +78,7 @@ import qualified Data.ByteString as B
 import qualified Data.ByteString.Char8 as C8
 import qualified Data.CaseInsensitive as CI
 import qualified Data.Text as T
+import qualified Data.Text.Encoding as T
 
 import Data.RFC5322
 import Data.RFC5322.Internal
@@ -334,6 +335,18 @@ instance HasCharset ByteEntity where
   charsetData = body -- XXX: do we need to drop the BOM / encoding decl?
   charsetDecoded = to $ \a -> (\t -> set body t a) <$> view charsetText a
 
+  -- | Encode (@utf-8@) and add/set charset parameter.  If consisting
+  -- entirely of ASCII characters, the @charset@ parameter gets set to
+  -- @us-ascii@ instead of @utf-8@.
+  --
+  -- Ignores Content-Type (which is not correct for all content types).
+  --
+  charsetEncode (Message h a) =
+    let
+      b = T.encodeUtf8 a
+      charset = if B.all (< 0x80) b then "us-ascii" else "utf-8"
+    in Message (set (contentType . rawParameter "charset") charset h) b
+
 -- | RFC 6657 provides for different media types having different
 -- ways to determine the charset.  This data type defines how a
 -- charset should be determined for some media type.
@@ -470,8 +483,8 @@ contentDisposition =
 
 -- | Get the filename, if specified.
 --
-filename :: Fold ContentDisposition T.Text
-filename = parameter "filename" . traversed . charsetText' . folded
+filename :: Traversal' ContentDisposition T.Text
+filename = parameter "filename" . traversed . charsetPrism . value
 
 
 -- | Top-level MIME body parser that uses headers to decide how to
