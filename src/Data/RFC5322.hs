@@ -75,6 +75,10 @@ module Data.RFC5322
   , parsePrint
   , crlf
   , quotedString
+
+  -- * Helpers
+  , isVchar
+  , isQtext
   ) where
 
 import Control.Applicative
@@ -300,14 +304,16 @@ optionalCFWS = cfws <|> pure mempty
 
 -- §3.2.4.  Quoted Strings
 
+isQtext :: Word8 -> Bool
+isQtext c = c == 33 || (c >= 35 && c <= 91) || (c >= 93 && c <= 126)
+
 quotedString :: Parser B.ByteString
 quotedString =
   optionalCFWS *> dquote
   *> foldMany (optionalFWS <<>> qcontent) <<>> optionalFWS
   <* dquote <* optionalCFWS
   where
-    qtext c = c == 33 || (c >= 35 && c <= 91) || (c >= 93 && c <= 126)
-    qcontent = B.singleton <$> satisfy qtext <|> B.singleton <$> quotedPair
+    qcontent = B.singleton <$> satisfy isQtext <|> B.singleton <$> quotedPair
 
 quotedPair :: Parser Word8
 quotedPair = char8 '\\' *> (vchar <|> wsp)
@@ -332,8 +338,11 @@ unstructured =
   foldMany (optionalFWS <<>> (B.singleton <$> vchar))
   <<>> A.takeWhile isWsp
 
+isVchar :: Word8 -> Bool
+isVchar c = c >= 0x21 && c <= 0x7e
+
 vchar :: Parser Word8
-vchar = satisfy (\c -> c >= 33 && c <= 126)
+vchar = satisfy isVchar
 
 
 -- | Given a parser, construct a 'Fold'

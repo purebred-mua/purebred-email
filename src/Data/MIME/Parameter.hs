@@ -32,7 +32,8 @@ module Data.MIME.Parameter
 
 import Control.Applicative ((<|>), optional)
 import Data.Foldable (fold)
-import Data.Semigroup ((<>))
+import Data.Functor (($>))
+import Data.Semigroup ((<>), Sum(..), Max(..))
 import Data.Word (Word8)
 import Foreign (withForeignPtr, plusPtr, minusPtr, peek, peekByteOff, poke)
 import System.IO.Unsafe (unsafeDupablePerformIO)
@@ -48,6 +49,7 @@ import qualified Data.Text.Encoding as T
 
 import Data.MIME.Charset
 import Data.MIME.Internal
+import Data.RFC5322 (isQtext, isVchar)
 import Data.RFC5322.Internal (ci)
 
 type RawParameters = [(CI B.ByteString, B.ByteString)]
@@ -84,11 +86,13 @@ setParam k v = (renderParam k v <>) . deleteParam k
 -- 'ParameterValue' value is used as-is.
 renderParam :: CI B.ByteString -> ParameterValue B.ByteString -> [(CI B.ByteString, B.ByteString)]
 renderParam k pv = case pv of
-  ParameterValue Nothing Nothing v -> case extEncode v of
-    (False, v') -> [(k, v')]
-    (True, v') -> [(k <> "*", "''" <> v')]
+  ParameterValue Nothing Nothing v -> case extEncode minBound v of
+    (Plain, v') -> [(k, v')]
+    (Quoted, v') -> [(k, "\"" <> v' <> "\"")]
+    (Extended, v') -> [(k <> "*", "''" <> v')]
   ParameterValue charset lang v ->
-    [(k <> "*", f charset <> "'" <> f lang <> "'" <> snd (extEncode v))]
+    -- charset or lang has been specified; force extended syntax
+    [(k <> "*", f charset <> "'" <> f lang <> "'" <> snd (extEncode Extended v))]
   where
   f = maybe "" original
 
@@ -238,11 +242,18 @@ decodePercent (B.PS sfp soff slen) = unsafeDupablePerformIO $ do
       fill dptr (sptr `plusPtr` soff)
   pure $ B.PS dfp 0 <$> result
 
--- | Return the encoded string, and whether percent-encoding was needed.
-extEncode :: B.ByteString -> (Bool, B.ByteString)
-extEncode s@(B.PS sfp soff slen)
-  | slen == dlen = (False, s)
-  | otherwise = (True, d)
+data ParameterEncoding = Plain | Quoted | Extended
+  deriving (Eq, Ord, Bounded)
+
+-- | Given a requested encoding and a string, return an encoded
+-- string along with the actual encoding used.
+--
+-- The requested encoding will be used when it is capable of
+-- encoding the string, otherwise the first capable encoding
+-- is used.
+--
+extEncode :: ParameterEncoding -> B.ByteString -> (ParameterEncoding, B.ByteString)
+extEncode encReq s@(B.PS sfp soff slen) = (enc, d)
   where
   -- regular parameter:
   --  value := token / quoted-string   (RFC 2045)
@@ -255,27 +266,49 @@ extEncode s@(B.PS sfp soff slen)
   --  attribute-char := <any (US-ASCII) CHAR except SPACE, CTLs, "*", "'", "%", or tspecials>
   --  extended-other-values := *(ext-octet / attribute-char)
   --  ext-octet := "%" 2(DIGIT / "A" / "B" / "C" / "D" / "E" / "F")
-  isAttrChar c = c > 0x20 && c < 0x80 && c `B.notElem` "()<>@,;:\\\"/[]?=*'%"
-  numEncChars c = if isAttrChar c then 1 else 3
-  dlen = B.foldr' (\c z -> z + numEncChars c) 0 s
-  pokeEncoded ptr c =
-    let (hi, lo) = hexEncode c
-    in poke ptr 37 {- % -} *> poke (ptr `plusPtr` 1) hi *> poke (ptr `plusPtr` 2) lo
+  --
+  isTspecial = (`B.elem` "()<>@,;:\\\"/[]?=")
+  isAttrChar c = isVchar c && c `B.notElem` "*'%" && not (isTspecial c)
+  numEncChars c = if isAttrChar c then 1 else 3  -- conservative estimate of bytes
+                                                 -- needed to encode char
+  charEncoding c
+    | isAttrChar c = Plain
+    | isVchar c || c == 0x20 || c == 0x09 = Quoted
+    | otherwise = Extended
+  charInfo c = (Sum (numEncChars c), Max (charEncoding c))
+  (Sum dlenMax, encCap) = foldMap charInfo $ B.unpack s
+  enc
+    | B.null s = Quoted  -- Plain cannot encode empty string
+    | otherwise = getMax (Max encReq <> encCap)
+
+  -- poke the char (possibly encoded) and return updated dest ptr
+  poke' ptr c = case enc of
+    Plain -> poke ptr c $> ptr `plusPtr` 1
+    Quoted
+      | isQtext c -> poke ptr c $> ptr `plusPtr` 1
+      | otherwise -> do
+          poke ptr 0x5c -- backslash
+          poke (ptr `plusPtr` 1) c
+          pure (ptr `plusPtr` 2)
+    Extended
+      | isAttrChar c -> poke ptr c $> ptr `plusPtr` 1
+      | otherwise -> do
+          let (hi, lo) = hexEncode c
+          poke ptr 37 {- % -}
+          poke (ptr `plusPtr` 1) hi
+          poke (ptr `plusPtr` 2) lo
+          pure (ptr `plusPtr` 3)
 
   d = unsafeDupablePerformIO $ do
-    dfp <- B.mallocByteString dlen
-    withForeignPtr dfp $ \dptr ->
+    dfp <- B.mallocByteString dlenMax
+    dlen <- withForeignPtr dfp $ \dptr ->
       withForeignPtr sfp $ \sptr -> do
         let
           slimit = sptr `plusPtr` (soff + slen)
-          fill !dp !sp
-            | sp >= slimit = pure ()
-            | otherwise = do
-              c <- peek sp
-              if isAttrChar c
-                then poke dp c *> fill (dp `plusPtr` 1) (sp `plusPtr` 1)
-                else pokeEncoded dp c *> fill (dp `plusPtr` 3) (sp `plusPtr` 1)
-        fill dptr sptr
+          fill !sp !dp
+            | sp >= slimit = pure (dp `minusPtr` dptr)
+            | otherwise = peek sp >>= poke' dp >>= fill (sp `plusPtr` 1)
+        fill sptr dptr
     pure $ B.PS dfp 0 dlen
 
 -- | Types that have 'Parameters'

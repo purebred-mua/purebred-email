@@ -26,25 +26,63 @@ import qualified Data.Text as T
 
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit ((@?=), testCase)
+import Test.Tasty.QuickCheck
+import Test.QuickCheck.Instances ()
 
 import Data.MIME
 
 unittests :: TestTree
 unittests =
   testGroup "content disposition"
-    [ testCase "simple read" $
+    [ testCase "read empty (plain; should fail)" $
+        preview lFilename
+        (Message (Headers [("Content-Disposition", "attachment; filename=")]) (Part ""))
+        @?= Nothing
+    , testCase "read empty (quoted)" $
+        preview lFilename
+        (Message (Headers [("Content-Disposition", "attachment; filename=\"\"")]) (Part ""))
+        @?= Just ""
+    , testCase "read empty (extended)" $
+        preview lFilename
+        (Message (Headers [("Content-Disposition", "attachment; filename*=''")]) (Part ""))
+        @?= Just ""
+    , testCase "read plain" $
         preview lFilename
         (Message (Headers [("Content-Disposition", "attachment; filename=foo.pdf")]) (Part ""))
         @?= Just "foo.pdf"
-    , testCase "quoted read" $
+    , testCase "read quoted" $
         preview lFilename
         (Message (Headers [("Content-Disposition", "attachment; filename=\"/tmp/foo.pdf\"")]) (Part ""))
         @?= Just "/tmp/foo.pdf"
-    , testCase "modify simple -> simple" $
+    , testCase "set quoted (empty string)" $
+        (view headers . set lFilename "")
+        (Message (Headers [("Content-Disposition", "attachment; filename=foo.pdf")]) (Part ""))
+        @?= Headers [("Content-Disposition", "attachment; filename=\"\"")]
+    , testCase "set quoted (space char)" $
+        (view headers . set lFilename "hello world.txt")
+        (Message (Headers [("Content-Disposition", "attachment; filename=foo.pdf")]) (Part ""))
+        @?= Headers [("Content-Disposition", "attachment; filename=\"hello\\ world.txt\"")]
+    , testCase "set quoted (backslash char)" $
+        (view headers . set lFilename "hello\\world.txt")
+        (Message (Headers [("Content-Disposition", "attachment; filename=foo.pdf")]) (Part ""))
+        @?= Headers [("Content-Disposition", "attachment; filename=\"hello\\\\world.txt\"")]
+    , testCase "set quoted (=)" $
+        (view headers . set lFilename "hello=world.txt")
+        (Message (Headers [("Content-Disposition", "attachment; filename=foo.pdf")]) (Part ""))
+        @?= Headers [("Content-Disposition", "attachment; filename=\"hello=world.txt\"")]
+    , testCase "set quoted (\")" $
+        (view headers . set lFilename "hello\"world\".txt")
+        (Message (Headers [("Content-Disposition", "attachment; filename=foo.pdf")]) (Part ""))
+        @?= Headers [("Content-Disposition", "attachment; filename=\"hello\\\"world\\\".txt\"")]
+    , testCase "modify plain -> plain" $
         (preview lFilename . over lFilename (T.drop 1))
         (Message (Headers [("Content-Disposition", "attachment; filename=foo.pdf")]) (Part ""))
         @?= Just "oo.pdf"
-    , testCase "modify quoted -> simple" $
+    , testCase "modify plain -> quoted" $
+        (preview lFilename . over lFilename (T.map (\c -> if c == '.' then '\\' else c)))
+        (Message (Headers [("Content-Disposition", "attachment; filename=foo.pdf")]) (Part ""))
+        @?= Just "foo\\pdf"
+    , testCase "modify quoted -> plain" $
         (preview lFilename . over lFilename stripPath)
         (Message (Headers [("Content-Disposition", "attachment; filename=\"/tmp/foo.pdf\"")]) (Part ""))
         @?= Just "foo.pdf"
@@ -72,6 +110,10 @@ unittests =
         (preview lFilename . set lFilename "new\nline")
         (Message (Headers [("Content-Disposition", "attachment; filename=\"/tmp/foo.pdf\"")]) (Part ""))
         @?= Just "new\nline"
+    , testProperty "filename round-trip" $ \s ->
+        (preview lFilename . set lFilename s)
+        (Message (Headers [("Content-Disposition", "attachment; filename=foo.pdf")]) (Part ""))
+        == Just s
     ]
   where
     lFilename = headers . contentDisposition . filename
