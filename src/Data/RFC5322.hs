@@ -59,6 +59,7 @@ module Data.RFC5322
     Message(..)
   , message
   , headers
+  , headerList
   , body
   , Headers(..)
   , header
@@ -142,6 +143,10 @@ data Message s a = Message Headers a
 headers :: Lens' (Message s a) Headers
 headers f (Message h b) = fmap (\h' -> Message h' b) (f h)
 {-# ANN headers ("HLint: ignore Avoid lambda" :: String) #-}
+
+-- | Access headers as a list of key/value pairs.
+headerList :: Lens' (Message s a) [(CI B.ByteString, B.ByteString)]
+headerList = headers . coerced
 
 body :: Lens (Message ctx a) (Message ctx' b) a b
 body f (Message h b) = fmap (\b' -> Message h b') (f b)
