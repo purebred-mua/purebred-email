@@ -26,6 +26,8 @@ module Data.MIME.Parameter
   , newParameter
 
   , ParameterValue(..)
+  , EncodedParameterValue
+  , DecodedParameterValue
   , value
 
   , HasParameters(..)
@@ -36,6 +38,7 @@ import Data.Foldable (fold)
 import Data.Functor (($>))
 import Data.Semigroup ((<>), Sum(..), Max(..))
 import Data.Word (Word8)
+import Data.Void (Void)
 import Foreign (withForeignPtr, plusPtr, minusPtr, peek, peekByteOff, poke)
 import System.IO.Unsafe (unsafeDupablePerformIO)
 
@@ -62,7 +65,7 @@ newtype Parameters = Parameters [(CI B.ByteString, B.ByteString)]
   deriving (Eq, Show)
 
 type instance Index Parameters = CI B.ByteString
-type instance IxValue Parameters = ParameterValue B.ByteString
+type instance IxValue Parameters = EncodedParameterValue
 
 paramiso :: Iso' Parameters [(CI B.ByteString, B.ByteString)]
 paramiso = iso (\(Parameters raw) -> raw) Parameters
@@ -78,22 +81,22 @@ instance Ixed Parameters where
 
 -- | Set the parameter (which may need to use the parameter
 -- continuation mechanism).
-setParam :: CI B.ByteString -> ParameterValue B.ByteString -> RawParameters -> RawParameters
+setParam :: CI B.ByteString -> EncodedParameterValue -> RawParameters -> RawParameters
 setParam k v = (renderParam k v <>) . deleteParam k
 
 -- | Turn a ParameterValue into a list of raw parameters
 --
 -- FIXME: currently does not do continutations etc.
 -- 'ParameterValue' value is used as-is.
-renderParam :: CI B.ByteString -> ParameterValue B.ByteString -> [(CI B.ByteString, B.ByteString)]
+renderParam :: CI B.ByteString -> EncodedParameterValue -> [(CI B.ByteString, B.ByteString)]
 renderParam k pv = case pv of
   ParameterValue Nothing Nothing v -> case extEncode minBound v of
     (Plain, v') -> [(k, v')]
     (Quoted, v') -> [(k, "\"" <> v' <> "\"")]
     (Extended, v') -> [(k <> "*", "''" <> v')]
-  ParameterValue charset lang v ->
+  ParameterValue cs lang v ->
     -- charset or lang has been specified; force extended syntax
-    [(k <> "*", f charset <> "'" <> f lang <> "'" <> snd (extEncode Extended v))]
+    [(k <> "*", f cs <> "'" <> f lang <> "'" <> snd (extEncode Extended v))]
   where
   f = maybe "" original
 
@@ -109,7 +112,7 @@ deleteParam k = filter (not . test . fst)
 instance At Parameters where
   at k = paramiso . l
     where
-    l :: Lens' RawParameters (Maybe (ParameterValue B.ByteString))
+    l :: Lens' RawParameters (Maybe EncodedParameterValue)
     l f kv =
       let
         g Nothing = deleteParam k kv
@@ -156,20 +159,27 @@ otherSection k i m =
   where
     i' = mk $ C.pack (show i)
 
-data ParameterValue a = ParameterValue
-  (Maybe (CI B.ByteString))  -- charset
+data ParameterValue cs a = ParameterValue
+  (Maybe cs)                 -- charset
   (Maybe (CI B.ByteString))  -- language
   a                          -- value
   deriving (Eq, Show)
 
-value :: Lens (ParameterValue a) (ParameterValue b) a b
+type EncodedParameterValue = ParameterValue CharsetName B.ByteString
+type DecodedParameterValue = ParameterValue Void T.Text
+
+value :: Lens (ParameterValue cs a) (ParameterValue cs b) a b
 value f (ParameterValue a b c) = ParameterValue a b <$> f c
+
+charset :: Lens (ParameterValue cs a) (ParameterValue cs' a) (Maybe cs) (Maybe cs')
+charset f (ParameterValue a b c) = (\a' -> ParameterValue a' b c) <$> f a
+
 
 -- | Convenience function to construct a parameter value.
 -- If you need to to specify language, use the 'ParameterValue'
 -- constructor directly.
 --
-newParameter :: T.Text -> ParameterValue B.ByteString
+newParameter :: T.Text -> EncodedParameterValue
 newParameter = review charsetPrism . ParameterValue Nothing Nothing
 
 
@@ -181,21 +191,21 @@ newParameter = review charsetPrism . ParameterValue Nothing Nothing
 -- contains only ASCII characters then the charset declaration is
 -- omitted (so that it can be encoded as a non-extended parameter).
 --
-instance HasCharset (ParameterValue B.ByteString) where
-  type Decoded (ParameterValue B.ByteString) = ParameterValue T.Text
+instance HasCharset EncodedParameterValue where
+  type Decoded EncodedParameterValue = DecodedParameterValue
   charsetName = to $ \(ParameterValue name _ _) -> name <|> Just "us-ascii"
   charsetData = value
-  charsetDecoded = to $ \a -> (\t -> set value t a) <$> view charsetText a
+  charsetDecoded = to $ \a -> (\t -> (set charset Nothing . set value t) a) <$> view charsetText a
   charsetEncode (ParameterValue _ lang s) =
     let
       bs = T.encodeUtf8 s
-      charset = if B.all (< 0x80) bs then Nothing else Just "utf-8"
-    in ParameterValue charset lang bs
+      cs = if B.all (< 0x80) bs then Nothing else Just "utf-8"
+    in ParameterValue cs lang bs
 
-getParameter :: CI B.ByteString -> RawParameters -> Maybe (ParameterValue B.ByteString)
+getParameter :: CI B.ByteString -> RawParameters -> Maybe EncodedParameterValue
 getParameter k m = do
   InitialSection cont enc s <- initialSection k m
-  (charset, lang, v0) <-
+  (cs, lang, v0) <-
     either (const Nothing) Just $ parseOnly (parseInitialValue enc) s
   let
     sect0 = OtherSection enc v0
@@ -203,7 +213,7 @@ getParameter k m = do
     sects = case cont of
       NotContinued -> [sect0]
       Continued -> sect0 : otherSects 1
-  ParameterValue charset lang . fold <$> traverse decode sects
+  ParameterValue cs lang . fold <$> traverse decode sects
   where
     parseInitialValue NotEncoded =
       (Nothing, Nothing, ) <$> takeByteString
@@ -335,7 +345,7 @@ parameterList = parameters . coerced
 --
 parameter
   :: HasParameters a
-  => CI B.ByteString -> Lens' a (Maybe (ParameterValue B.ByteString))
+  => CI B.ByteString -> Lens' a (Maybe EncodedParameterValue)
 parameter k = parameters . at k
 
 -- | Raw parameter.  The key is used as-is.  No processing of

@@ -497,7 +497,7 @@ filename = filenameParameter . traversed . charsetPrism . value
 -- λ> set ('contentDisposition' . 'filenameParameter') (Just ('newParameter' "foo.txt")) hdrs
 -- Headers [("Content-Disposition","attachment; filename=foo.txt")]
 -- @
-filenameParameter :: HasParameters a => Lens' a (Maybe (ParameterValue B.ByteString))
+filenameParameter :: HasParameters a => Lens' a (Maybe EncodedParameterValue)
 filenameParameter = parameter "filename"
 
 
