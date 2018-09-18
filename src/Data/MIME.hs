@@ -59,6 +59,7 @@ module Data.MIME
   , DispositionType(..)
   , dispositionType
   , filename
+  , filenameParameter
 
   -- * Re-exports
   , module Data.RFC5322
@@ -481,10 +482,23 @@ contentDisposition =
   header "content-disposition"
   . parsePrint parseContentDisposition printContentDisposition
 
--- | Get the filename, if specified.
+-- | Traverse the value of the filename parameter (if present).
 --
-filename :: Traversal' ContentDisposition T.Text
-filename = parameter "filename" . traversed . charsetPrism . value
+filename :: HasParameters a => Traversal' a T.Text
+filename = filenameParameter . traversed . charsetPrism . value
+
+-- | Access the filename parameter as a @Maybe ('ParameterValue' B.ByteString)@.
+--
+-- This can be used to read or set the filename parameter (see also
+-- the 'newParameter' convenience function):
+--
+-- @
+-- λ> let hdrs = Headers [("Content-Disposition", "attachment")]
+-- λ> set ('contentDisposition' . 'filenameParameter') (Just ('newParameter' "foo.txt")) hdrs
+-- Headers [("Content-Disposition","attachment; filename=foo.txt")]
+-- @
+filenameParameter :: HasParameters a => Lens' a (Maybe (ParameterValue B.ByteString))
+filenameParameter = parameter "filename"
 
 
 -- | Top-level MIME body parser that uses headers to decide how to

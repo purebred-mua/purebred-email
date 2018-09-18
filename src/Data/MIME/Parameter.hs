@@ -23,6 +23,7 @@ module Data.MIME.Parameter
   , parameterList
   , parameter
   , rawParameter
+  , newParameter
 
   , ParameterValue(..)
   , value
@@ -163,6 +164,13 @@ data ParameterValue a = ParameterValue
 
 value :: Lens (ParameterValue a) (ParameterValue b) a b
 value f (ParameterValue a b c) = ParameterValue a b <$> f c
+
+-- | Convenience function to construct a parameter value.
+-- If you need to to specify language, use the 'ParameterValue'
+-- constructor directly.
+--
+newParameter :: T.Text -> ParameterValue B.ByteString
+newParameter = review charsetPrism . ParameterValue Nothing Nothing
 
 
 -- | The default charset @us-ascii@ is implied by the abstract of
