@@ -202,11 +202,11 @@ type TextEntity = Message () T.Text
 data MIME
   = Part B.ByteString
   | Multipart [MIMEMessage]
-  deriving (Show)
+  deriving (Eq, Show)
 
 -- | Get all leaf entities from the MIME message
 --
-entities :: Fold MIMEMessage WireEntity
+entities :: Traversal' MIMEMessage WireEntity
 entities f (Message h a) = case a of
   Part b ->
     (\(Message h' b') -> Message h' (Part b')) <$> f (Message h b)
@@ -214,7 +214,7 @@ entities f (Message h a) = case a of
     Message h . Multipart <$> sequenceA (entities f <$> bs)
 
 -- | Leaf entities with @Content-Disposition: attachment@
-attachments :: Fold MIMEMessage WireEntity
+attachments :: Traversal' MIMEMessage WireEntity
 attachments = entities . filtered (notNullOf l) where
   l = headers . contentDisposition . dispositionType . filtered (== Attachment)
 

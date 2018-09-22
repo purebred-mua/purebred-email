@@ -138,7 +138,7 @@ header k = hdriso . traversed . filtered ((k ==) . fst) . _2
 -- messages.
 --
 data Message s a = Message Headers a
-  deriving (Show)
+  deriving (Eq, Show)
 
 headers :: Lens' (Message s a) Headers
 headers f (Message h b) = fmap (\h' -> Message h' b) (f h)

@@ -114,6 +114,21 @@ unittests =
         (preview lFilename . set lFilename s)
         (Message (Headers [("Content-Disposition", "attachment; filename=foo.pdf")]) (Part ""))
         == Just s
+    , testCase "unset multiple filenames" $
+        set (attachments . headers . contentDisposition . filenameParameter) Nothing
+        (Message (Headers []) (Multipart
+          [ Message (Headers [("Content-Disposition", "inline; filename=msg.txt")]) (Part "")
+          , Message (Headers [("Content-Disposition", "attachment; filename=foo.pdf")]) (Part "")
+          , Message (Headers [("Content-Disposition", "attachment; filename=bar.pdf")]) (Part "")
+          ]
+        ))
+        @?=
+        Message (Headers []) (Multipart
+          [ Message (Headers [("Content-Disposition", "inline; filename=msg.txt")]) (Part "")
+          , Message (Headers [("Content-Disposition", "attachment")]) (Part "")
+          , Message (Headers [("Content-Disposition", "attachment")]) (Part "")
+          ]
+        )
     ]
   where
     lFilename = headers . contentDisposition . filename
