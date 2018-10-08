@@ -26,7 +26,11 @@ maintainer:          frase@frase.id.au
 copyright:           Copyright 2017  Fraser Tweedale
 category:            Data, Email
 build-type:          Simple
-extra-source-files:  README.rst, stack.yaml
+extra-source-files:
+  README.rst
+  stack.yaml
+  test-vectors/*.eml
+  tests/golden/*.golden
 cabal-version:       >=1.10
 tested-with:
   GHC==8.0.2, GHC==8.2.2, GHC==8.4.3, GHC==8.6.1
