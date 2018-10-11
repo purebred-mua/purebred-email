@@ -269,20 +269,14 @@ data Domain
     deriving (Show,Eq)
 
 renderAddressSpec :: AddrSpec -> Builder.Builder
-renderAddressSpec (AddrSpec lp (DomainDotAtom b)) =
-    let buildLP = Builder.byteString lp
-    in mconcat
-           [ if B.isInfixOf " " lp
-                 then mconcat ["\"", buildLP, "\""]
-                 else buildLP
-           , "@"
-           , foldl
-                 (\acc x ->
-                       acc <> Builder.byteString x)
-                 mempty $
-             intersperse "." b]
+renderAddressSpec (AddrSpec lp (DomainDotAtom b))
+  | " " `B.isInfixOf` lp = "\"" <> buildLP <> "\"" <> rest
+  | otherwise = buildLP <> rest
+  where
+    buildLP = Builder.byteString lp
+    rest = "@" <> foldMap Builder.byteString (intersperse "." b)
 renderAddressSpec (AddrSpec lp (DomainLiteral b)) =
-    mconcat [Builder.byteString lp, "@", Builder.byteString b]
+  foldMap Builder.byteString [lp, "@", b]
 
 addressSpec :: Parser AddrSpec
 addressSpec = AddrSpec <$> localPart <*> (char8 '@' *> domain)
