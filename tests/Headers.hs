@@ -3,14 +3,15 @@
 module Headers where
 
 import Control.Lens
+import Data.List.NonEmpty (NonEmpty((:|)))
+import Data.Semigroup ((<>))
 import Data.Word (Word8)
+
 import qualified Data.ByteString.Char8 as BC
 import qualified Data.ByteString as B
 import Data.ByteString.Lazy (toStrict)
 import Data.Attoparsec.ByteString.Char8 (parseOnly)
 import qualified Data.ByteString.Builder as Builder
-
-import Data.Semigroup ((<>))
 import qualified Data.CaseInsensitive as CI
 
 import Test.Tasty (TestTree, testGroup)
@@ -27,6 +28,7 @@ unittests :: TestTree
 unittests = testGroup "Headers"
   [ parsesMailboxesSuccessfully
   , parsesAddressesSuccessfully
+  , testRenderMailboxes
   , rendersFieldsSuccessfully
   , ixAndAt
   , contentTypeTests
@@ -57,6 +59,14 @@ rendersFieldsSuccessfully =
           , ( "X-Test" , "these are short words and more and more and more and all asdfsdf of a suddenALongWordAppears")
           , "X-Test: these are short words and more and more and more and all asdfsdf of\r\n a suddenALongWordAppears\r\n")
         ]
+
+testRenderMailboxes :: TestTree
+testRenderMailboxes = testCase "test renderMailboxes" $
+  renderMailboxes xs @?= "\"Roman Joost\" <foo@bar.com>, bar@bar.com"
+  where
+    xs = [ Mailbox (Just "Roman Joost") (AddrSpec "foo" (DomainDotAtom ("bar" :| ["com"])))
+         , Mailbox Nothing (AddrSpec "bar" (DomainDotAtom ("bar" :| ["com"])))
+         ]
 
 -- | Note some examples are taken from https://tools.ietf.org/html/rfc3696#section-3
 mailboxFixtures :: [(String, Either String Mailbox -> Assertion, BC.ByteString)]

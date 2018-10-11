@@ -98,11 +98,12 @@ module Data.RFC5322
 
 import Control.Applicative
 import Control.Monad (void)
-import Data.List (findIndex)
+import Data.Foldable (fold)
+import Data.List (findIndex, intersperse)
+import Data.List.NonEmpty (NonEmpty, intersperse)
 import Data.Semigroup ((<>))
 import Data.Word (Word8)
 
-import Data.List.NonEmpty (NonEmpty, intersperse)
 import Control.Lens
 import Control.Lens.Cons.Extras (recons)
 import Data.Attoparsec.ByteString as A hiding (parse, take)
@@ -221,12 +222,10 @@ renderDisplayName x =
         , "\" "]
 
 renderMailboxes :: [Mailbox] -> B.ByteString
-renderMailboxes = toStrict . Builder.toLazyByteString . go
-  where
-    go :: [Mailbox] -> Builder.Builder
-    go [] = mempty
-    go [x] = buildMailbox x
-    go xs = foldr (\x acc -> acc <> mconcat [ ", ", buildMailbox x]) mempty xs
+renderMailboxes = toStrict . Builder.toLazyByteString . buildMailboxes
+
+buildMailboxes :: [Mailbox] -> Builder.Builder
+buildMailboxes = fold . Data.List.intersperse ", " . fmap buildMailbox
 
 renderMailbox :: Mailbox -> B.ByteString
 renderMailbox = toStrict . Builder.toLazyByteString . buildMailbox
@@ -274,7 +273,7 @@ renderAddressSpec (AddrSpec lp (DomainDotAtom b))
   | otherwise = buildLP <> rest
   where
     buildLP = Builder.byteString lp
-    rest = "@" <> foldMap Builder.byteString (intersperse "." b)
+    rest = "@" <> foldMap Builder.byteString (Data.List.NonEmpty.intersperse "." b)
 renderAddressSpec (AddrSpec lp (DomainLiteral b)) =
   foldMap Builder.byteString [lp, "@", b]
 
