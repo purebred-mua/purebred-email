@@ -348,17 +348,16 @@ fields = Headers <$> many field
 
 -- Header serialisation
 buildFields :: Headers -> Builder.Builder
-buildFields = foldlOf (hdriso . traversed) (\acc h -> acc <> buildField h) mempty
+buildFields = foldMapOf (hdriso . traversed) buildField
 
 buildField :: (CI B.ByteString, B.ByteString) -> Builder.Builder
 buildField (k,v) =
-    let key = original k
-        kLength = B.length key
-    in mconcat
-           [ Builder.byteString key
-           , ": "
-           , Builder.byteString $ foldUnstructured kLength v
-           , "\n"]
+  let key = original k
+  in
+    Builder.byteString key
+    <> ": "
+    <> Builder.byteString (foldUnstructured (B.length key) v)
+    <> "\r\n"
 
 -- | SP or TAB
 wsp :: Parser Word8

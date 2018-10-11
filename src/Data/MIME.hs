@@ -618,24 +618,12 @@ renderMessage = toStrict . Builder.toLazyByteString . buildMessage
 -- | Serialise a given `MIMEMessage` using a `Builder`
 buildMessage :: MIMEMessage -> Builder.Builder
 buildMessage (Message h (Part partbody)) =
-    mconcat [buildFields h, "\n", Builder.byteString partbody]
+    buildFields h <> "\r\n" <> Builder.byteString partbody
 buildMessage (Message h (Multipart xs)) =
     let b = firstOf (contentType . mimeBoundary) h
-        boundaryEnd = maybe mempty (
-          \b' -> mconcat ["\n--", Builder.byteString b', "--\n"])
-        boundaryBegin = maybe mempty (
-          \b' -> mconcat ["\n--", Builder.byteString b', "\n"])
-        allBodies =
-            foldl
-                (\acc part ->
-                      mconcat
-                          [ acc
-                          , boundaryBegin b
-                          , buildMessage part
-                          ])
-                mempty
-                xs
-    in buildFields h <> mconcat [allBodies, boundaryEnd b]
+        boundary = maybe mempty (\b' -> "\r\n--" <> Builder.byteString b') b
+        ents = foldMap (\part -> boundary <> "\r\n" <> buildMessage part) xs
+    in buildFields h <> ents <> boundary <> "--\r\n"
 
 
 mimeHeader :: (CI B.ByteString, B.ByteString)

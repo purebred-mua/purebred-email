@@ -45,17 +45,17 @@ rendersFieldsSuccessfully =
     inputs =
         [ ( "no folding"
           , ("Subject", "Re: Simple Subject")
-          , "Subject: Re: Simple Subject\n")
+          , "Subject: Re: Simple Subject\r\n")
         , ( "continuous line"
           , ("Subject", "ThisisalongcontiniousLineWithoutAnyWhiteSpaceandNowSomeGarbageASDFASDFASDFASDF")
-          , "Subject: \r\n ThisisalongcontiniousLineWithoutAnyWhiteSpaceandNowSomeGarbageASDFASDFASDFASDF\n")
+          , "Subject: \r\n ThisisalongcontiniousLineWithoutAnyWhiteSpaceandNowSomeGarbageASDFASDFASDFASDF\r\n")
         , ( "folding"
           , ( "Received"
             , "from adsl-33-138-215-182-129-129.test.example ([XX.XX.XXX.XXX]) by this.is.another.hostname.example with esmtp (Exim 4.24) id 1Akwaj-00035l-NT for me@test.example; Sun, 25 2004 21:35:09 -0500")
-          , "Received: from adsl-33-138-215-182-129-129.test.example ([XX.XX.XXX.XXX])\r\n by this.is.another.hostname.example with esmtp (Exim 4.24) id\r\n 1Akwaj-00035l-NT for me@test.example; Sun, 25 2004 21:35:09 -0500\n")
+          , "Received: from adsl-33-138-215-182-129-129.test.example ([XX.XX.XXX.XXX])\r\n by this.is.another.hostname.example with esmtp (Exim 4.24) id\r\n 1Akwaj-00035l-NT for me@test.example; Sun, 25 2004 21:35:09 -0500\r\n")
         , ( "folding with long words"
           , ( "X-Test" , "these are short words and more and more and more and all asdfsdf of a suddenALongWordAppears")
-          , "X-Test: these are short words and more and more and more and all asdfsdf of\r\n a suddenALongWordAppears\n")
+          , "X-Test: these are short words and more and more and more and all asdfsdf of\r\n a suddenALongWordAppears\r\n")
         ]
 
 -- | Note some examples are taken from https://tools.ietf.org/html/rfc3696#section-3
