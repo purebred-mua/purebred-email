@@ -100,7 +100,7 @@ import Control.Applicative
 import Control.Monad (void)
 import Data.Foldable (fold)
 import Data.List (findIndex, intersperse)
-import Data.List.NonEmpty (NonEmpty, intersperse)
+import Data.List.NonEmpty (intersperse)
 import Data.Semigroup ((<>))
 import Data.Word (Word8)
 
@@ -119,6 +119,7 @@ import Data.Time.Clock (UTCTime)
 import Data.Time.Format (defaultTimeLocale, formatTime)
 
 import Data.RFC5322.Internal
+import Data.RFC5322.Address.Types
 import Data.MIME.Charset (decodeLenient)
 
 type Header = (CI B.ByteString, B.ByteString)
@@ -203,11 +204,6 @@ renderRFC5422Date :: UTCTime -> B.ByteString
 renderRFC5422Date = Char8.pack . formatTime defaultTimeLocale rfc5422DateTimeFormat
 
 -- §3.4 Address Specification
-data Mailbox =
-    Mailbox (Maybe T.Text {- display name -})
-             AddrSpec
-    deriving (Show,Eq)
-
 buildMailbox :: Mailbox -> Builder.Builder
 buildMailbox (Mailbox n a) =
   maybe a' (\n' -> renderDisplayName n' <> "<" <> a' <> ">") n
@@ -257,16 +253,6 @@ dotAtomText = takeWhile1 isAtext <<>> foldMany (char8 '.' *> (Char8.cons '.' <$>
 dotAtom :: Parser B.ByteString
 dotAtom = optionalCFWS *> dotAtomText <* optionalCFWS
 
-data AddrSpec =
-    AddrSpec B.ByteString {- local part -}
-             Domain
-    deriving (Show,Eq)
-
-data Domain
-    = DomainDotAtom (NonEmpty B.ByteString {- printable ascii -})
-    | DomainLiteral B.ByteString
-    deriving (Show,Eq)
-
 renderAddressSpec :: AddrSpec -> Builder.Builder
 renderAddressSpec (AddrSpec lp (DomainDotAtom b))
   | " " `B.isInfixOf` lp = "\"" <> buildLP <> "\"" <> rest
@@ -299,12 +285,6 @@ domainLiteral =
 domain :: Parser Domain
 domain = (DomainDotAtom <$> (pure <$> dotAtom))
          <|> (DomainLiteral <$> domainLiteral)
-
-data Address
-    = Single Mailbox
-    | Group T.Text {- display name -}
-            [Mailbox]
-    deriving (Show,Eq)
 
 mailboxList :: Parser [Mailbox]
 mailboxList = mailbox `sepBy` char8 ','

@@ -44,6 +44,8 @@ source-repository head
 library
   exposed-modules:
     Data.RFC5322
+    , Data.RFC5322.Address.Text
+    , Data.RFC5322.Address.Types
     , Data.MIME
     , Data.MIME.Error
     , Data.MIME.Charset

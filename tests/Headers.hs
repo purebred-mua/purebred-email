@@ -4,6 +4,7 @@ module Headers where
 
 import Control.Lens
 import Data.List.NonEmpty (NonEmpty((:|)))
+import Data.String (IsString)
 import Data.Semigroup ((<>))
 import Data.Word (Word8)
 
@@ -11,15 +12,18 @@ import qualified Data.ByteString.Char8 as BC
 import qualified Data.ByteString as B
 import Data.ByteString.Lazy (toStrict)
 import Data.Attoparsec.ByteString.Char8 (parseOnly)
+import qualified Data.Attoparsec.Text as AText (parseOnly)
 import qualified Data.ByteString.Builder as Builder
 import qualified Data.CaseInsensitive as CI
+import Data.Either (isLeft)
 
 import Test.Tasty (TestTree, testGroup)
-import Test.Tasty.HUnit ((@=?), (@?=), testCase, Assertion)
+import Test.Tasty.HUnit (assertBool, (@=?), (@?=), testCase, Assertion)
 import Test.Tasty.QuickCheck
 import Test.QuickCheck.Instances ()
 
 import Data.MIME
+import qualified Data.RFC5322.Address.Text as AddressText (mailbox, address)
 
 renderField :: (CI.CI B.ByteString, B.ByteString) -> B.ByteString
 renderField = toStrict . Builder.toLazyByteString . buildField
@@ -27,7 +31,9 @@ renderField = toStrict . Builder.toLazyByteString . buildField
 unittests :: TestTree
 unittests = testGroup "Headers"
   [ parsesMailboxesSuccessfully
+  , parsesTextMailboxesSuccessfully
   , parsesAddressesSuccessfully
+  , parsesTextAddressesSuccessfully
   , testRenderMailboxes
   , rendersFieldsSuccessfully
   , ixAndAt
@@ -69,74 +75,87 @@ testRenderMailboxes = testCase "test renderMailboxes" $
          ]
 
 -- | Note some examples are taken from https://tools.ietf.org/html/rfc3696#section-3
-mailboxFixtures :: [(String, Either String Mailbox -> Assertion, BC.ByteString)]
+mailboxFixtures :: IsString s => [(String, Either String Mailbox -> Assertion, s)]
 mailboxFixtures =
     [ ( "address with FQDN"
       , (Right (Mailbox Nothing (AddrSpec "foo" (DomainDotAtom $ pure "bar.com"))) @=?)
-      , BC.pack "foo@bar.com")
+      , "foo@bar.com")
     , ( "just with a host name"
       , (Right (Mailbox Nothing (AddrSpec "foo" (DomainDotAtom $ pure "bar"))) @=?)
-      , BC.pack "foo@bar")
+      , "foo@bar")
     , ( "domain as IPv4"
       , (Right (Mailbox (Just "roman") (AddrSpec "roman" (DomainLiteral "192.168.1.1"))) @=?)
-      , BC.pack "roman <roman@[192.168.1.1]>")
+      , "roman <roman@[192.168.1.1]>")
     , ( "domain as IPv6"
       , (Right (Mailbox (Just "roman") (AddrSpec "roman" (DomainLiteral "::1"))) @=?)
-      , BC.pack "roman <roman@[::1]>")
+      , "roman <roman@[::1]>")
     , ( "without TLD"
       , (Right (Mailbox Nothing (AddrSpec "roman" (DomainDotAtom $ pure "host"))) @=?)
-      , BC.pack "roman@host")
+      , "roman@host")
     , ( "with quotes in local-part"
       , (Right (Mailbox Nothing (AddrSpec "roman" (DomainDotAtom $ pure "host"))) @=?)
-      , BC.pack "\"roman\"@host")
+      , "\"roman\"@host")
     , ( "quoted localpart with @"
       , (Right (Mailbox Nothing (AddrSpec "Abc@def" (DomainDotAtom $ pure "host"))) @=?)
-      , BC.pack "\"Abc\\@def\"@host")
+      , "\"Abc\\@def\"@host")
     , ( "whitespace in quoted local-part"
       , (Right (Mailbox Nothing (AddrSpec "Mr Whitespace" (DomainDotAtom $ pure "host"))) @=?)
-      , BC.pack "\"Mr Whitespace\"@host")
+      , "\"Mr Whitespace\"@host")
     , ( "special chars in local-part"
       , (Right (Mailbox Nothing (AddrSpec "customer/department=shipping" (DomainDotAtom $ pure "host"))) @=?)
-      , BC.pack "<customer/department=shipping@host>")
+      , "<customer/department=shipping@host>")
     , ( "special chars in local-part"
       , (Right (Mailbox Nothing (AddrSpec "!def!xyz%abc" (DomainDotAtom $ pure "host"))) @=?)
-      , BC.pack "!def!xyz%abc@host")
+      , "!def!xyz%abc@host")
     , ( "garbled address"
-      , (Left "[: not enough input" @=?)
-      , BC.pack "fasdf@")
+      , assertBool "Parse error expected" . isLeft
+      , "fasdf@")
     , ( "wrong: comma in front of domain"
-      , (Left "[: Failed reading: satisfy" @=?)
-      , BC.pack "foo@,bar,com")
+      , assertBool "Parse error expected" . isLeft
+      , "foo@,bar,com")
     ]
 
 parsesMailboxesSuccessfully :: TestTree
 parsesMailboxesSuccessfully =
     testGroup "parsing mailboxes" $
     (\(desc,f,input) ->
+          testCase desc $ f (AText.parseOnly AddressText.mailbox input)) <$>
+    mailboxFixtures
+
+parsesTextMailboxesSuccessfully :: TestTree
+parsesTextMailboxesSuccessfully =
+    testGroup "parsing mailboxes (text)" $
+    (\(desc,f,input) ->
           testCase desc $ f (parseOnly mailbox input)) <$>
     mailboxFixtures
 
-addresses :: [(String, Either String Address -> Assertion, BC.ByteString)]
+addresses :: IsString s => [(String, Either String Address -> Assertion, s)]
 addresses =
     [ ( "single address"
       , (Right (Single (Mailbox Nothing (AddrSpec "foo" (DomainDotAtom $ pure "bar.com")))) @=?)
-      , BC.pack "<foo@bar.com>")
+      , "<foo@bar.com>")
     , ( "group of addresses"
       , (Right
              (Group
                   "Group"
                   [ Mailbox (Just "Mr Foo") (AddrSpec "foo" (DomainDotAtom $ pure "bar.com"))
                   , Mailbox (Just "Mr Bar") (AddrSpec "bar" (DomainDotAtom $ pure "bar.com"))]) @=?)
-      , BC.pack "Group: \"Mr Foo\" <foo@bar.com>, \"Mr Bar\" <bar@bar.com>;")
+      , "Group: \"Mr Foo\" <foo@bar.com>, \"Mr Bar\" <bar@bar.com>;")
     , ( "group of undisclosed recipients"
       , (Right (Group "undisclosed-recipients" []) @=?)
-      , BC.pack "undisclosed-recipients:;")
+      , "undisclosed-recipients:;")
     ]
 
 parsesAddressesSuccessfully :: TestTree
 parsesAddressesSuccessfully =
     testGroup "parsing addresses" $
     (\(desc,f,input) -> testCase desc $ f (parseOnly address input))
+    <$> addresses
+
+parsesTextAddressesSuccessfully :: TestTree
+parsesTextAddressesSuccessfully =
+    testGroup "parsing addresses (text)" $
+    (\(desc,f,input) -> testCase desc $ f (AText.parseOnly AddressText.address input))
     <$> addresses
 
 -- | Sanity check Ixed and At instances
