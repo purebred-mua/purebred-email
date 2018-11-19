@@ -1,4 +1,6 @@
 {-# LANGUAGE BangPatterns #-}
+{-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE DeriveAnyClass #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RankNTypes #-}
@@ -40,8 +42,10 @@ import Data.Semigroup ((<>), Sum(..), Max(..))
 import Data.Word (Word8)
 import Data.Void (Void)
 import Foreign (withForeignPtr, plusPtr, minusPtr, peek, peekByteOff, poke)
+import GHC.Generics (Generic)
 import System.IO.Unsafe (unsafeDupablePerformIO)
 
+import Control.DeepSeq (NFData)
 import Control.Lens
 import Data.Attoparsec.ByteString.Char8 hiding (take)
 import qualified Data.ByteString as B
@@ -62,7 +66,7 @@ type RawParameters = [(CI B.ByteString, B.ByteString)]
 -- and optional charset and language information (RFC 2231).
 --
 newtype Parameters = Parameters [(CI B.ByteString, B.ByteString)]
-  deriving (Eq, Show)
+  deriving (Eq, Show, Generic, NFData)
 
 type instance Index Parameters = CI B.ByteString
 type instance IxValue Parameters = EncodedParameterValue
@@ -163,7 +167,7 @@ data ParameterValue cs a = ParameterValue
   (Maybe cs)                 -- charset
   (Maybe (CI B.ByteString))  -- language
   a                          -- value
-  deriving (Eq, Show)
+  deriving (Eq, Show, Generic, NFData)
 
 type EncodedParameterValue = ParameterValue CharsetName B.ByteString
 type DecodedParameterValue = ParameterValue Void T.Text

@@ -1,3 +1,5 @@
+{-# LANGUAGE DeriveAnyClass #-}
+{-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE OverloadedStrings #-}
@@ -91,7 +93,9 @@ import Control.Applicative
 import Control.Monad (void)
 import Data.Maybe (fromMaybe)
 import Data.Semigroup ((<>))
+import GHC.Generics (Generic)
 
+import Control.DeepSeq (NFData)
 import Control.Lens
 import Data.Attoparsec.ByteString
 import Data.Attoparsec.ByteString.Char8 (char8)
@@ -281,7 +285,7 @@ caseInsensitive = iso CI.mk CI.original
 -- @
 --
 data ContentType = ContentType (CI B.ByteString) (CI B.ByteString) Parameters
-  deriving (Show)
+  deriving (Show, Generic, NFData)
 
 -- | Equality of Content-Type. Type and subtype are compared
 -- case-insensitively and parameters are also compared.  Use
@@ -479,10 +483,10 @@ contentType = lens sa sbt where
 data ContentDisposition = ContentDisposition
   DispositionType   -- disposition
   Parameters        -- parameters
-  deriving (Show)
+  deriving (Show, Generic, NFData)
 
 data DispositionType = Inline | Attachment
-  deriving (Eq, Show)
+  deriving (Eq, Show, Generic, NFData)
 
 dispositionType :: Lens' ContentDisposition DispositionType
 dispositionType f (ContentDisposition a b) =

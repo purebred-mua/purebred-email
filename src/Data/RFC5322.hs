@@ -1,3 +1,5 @@
+{-# LANGUAGE DeriveAnyClass #-}
+{-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RankNTypes #-}
@@ -103,7 +105,9 @@ import Data.List (findIndex, intersperse)
 import Data.List.NonEmpty (intersperse)
 import Data.Semigroup ((<>))
 import Data.Word (Word8)
+import GHC.Generics (Generic)
 
+import Control.DeepSeq (NFData)
 import Control.Lens
 import Control.Lens.Cons.Extras (recons)
 import Data.Attoparsec.ByteString as A hiding (parse, take)
@@ -124,7 +128,7 @@ import Data.MIME.Charset (decodeLenient)
 
 type Header = (CI B.ByteString, B.ByteString)
 newtype Headers = Headers [Header]
-  deriving (Eq, Show)
+  deriving (Eq, Show, Generic, NFData)
 
 type instance Index Headers = CI B.ByteString
 type instance IxValue Headers = B.ByteString
@@ -160,7 +164,7 @@ header k = hdriso . traversed . filtered ((k ==) . fst) . _2
 -- messages.
 --
 data Message s a = Message Headers a
-  deriving (Eq, Show)
+  deriving (Eq, Show, Generic, NFData)
 
 headers :: Lens' (Message s a) Headers
 headers f (Message h b) = fmap (\h' -> Message h' b) (f h)
