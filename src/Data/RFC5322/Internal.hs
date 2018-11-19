@@ -44,15 +44,15 @@ ci = fmap mk
 
 
 -- | Combine two semigroup parsers into one
-(<<>>) :: Semigroup m => Parser m -> Parser m -> Parser m
+(<<>>) :: Semigroup m => AT.Parser i m -> AT.Parser i m -> AT.Parser i m
 (<<>>) = liftA2 (<>)
 
 -- | Parse zero or more values and fold them
-foldMany :: (Monoid m) => Parser m -> Parser m
+foldMany :: (Monoid m) => AT.Parser i m -> AT.Parser i m
 foldMany = fmap fold . many
 
 -- | Parse one or more values and fold them
-foldMany1 :: (Semigroup m) => Parser m -> Parser m
+foldMany1 :: (Semigroup m) => AT.Parser i m -> AT.Parser i m
 foldMany1 = fmap (fold1 . fromList) . many1
 
 -- | Skip until the given parser succeeds

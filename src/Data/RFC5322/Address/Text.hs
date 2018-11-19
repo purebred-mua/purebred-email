@@ -14,10 +14,9 @@ module Data.RFC5322.Address.Text
   ) where
 
 import Control.Monad (void)
-import Control.Applicative ((<|>), liftA2, many, optional)
+import Control.Applicative ((<|>), optional)
 import Data.Foldable (fold)
-import Data.Semigroup ((<>), Semigroup)
-import Data.Semigroup.Foldable (fold1)
+import Data.Semigroup ((<>))
 import Data.List (intersperse)
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
@@ -25,10 +24,11 @@ import qualified Data.Text.Lazy as LT
 import qualified Data.Text.Internal.Builder as Builder
 import qualified Data.ByteString as B
 import Data.Attoparsec.Text as A hiding (parse, take)
-import Data.List.NonEmpty (fromList, intersperse)
+import Data.List.NonEmpty (intersperse)
 
 import Data.MIME.Charset (decodeLenient)
 import Data.RFC5322.Address.Types
+import Data.RFC5322.Internal
 
 
 renderMailboxes :: [Mailbox] -> T.Text
@@ -192,18 +192,3 @@ domainLiteral =
 domain :: Parser Domain
 domain = (DomainDotAtom <$> (pure . T.encodeUtf8 <$> dotAtom))
          <|> (DomainLiteral <$> (T.encodeUtf8 <$> domainLiteral))
-
--- Utility functions
---
-
--- | Combine two semigroup parsers into one
-(<<>>) :: Semigroup m => Parser m -> Parser m -> Parser m
-(<<>>) = liftA2 (<>)
-
--- | Parse zero or more values and fold them
-foldMany :: (Monoid m) => Parser m -> Parser m
-foldMany = fmap fold . many
-
--- | Parse one or more values and fold them
-foldMany1 :: (Semigroup m) => Parser m -> Parser m
-foldMany1 = fmap (fold1 . fromList) . many1
