@@ -6,17 +6,17 @@ version:             0.1.0.0
 synopsis:            types and parser for email messages (including MIME)
 description:
   The purebred email library.  RFC 5322, MIME, etc.
-
+  .
   Things that are currently implemented:
-
+  .
   - RFC 5322 message parsing
   - MIME multipart parsing (RFC 2046)
   - MIME message header extensions for non-ASCII text (RFC 2047)
   - MIME parameter value and encoded word extensions (RFC 2231)
   - Content-Disposition header field (RFC 2183)
-
+  .
   Things that are not yet implemented:
-
+  .
   - Message printing / serialisation
 
 license:             AGPL-3
