@@ -22,7 +22,7 @@ module Data.RFC5322.Internal
 
   ) where
 
-import Control.Applicative ((<|>), liftA2, many)
+import Control.Applicative ((<|>), Alternative, liftA2, many)
 import Control.Monad (void)
 import Data.Attoparsec.ByteString as A
 import Data.Attoparsec.Internal as A
@@ -44,16 +44,16 @@ ci = fmap mk
 
 
 -- | Combine two semigroup parsers into one
-(<<>>) :: Semigroup m => AT.Parser i m -> AT.Parser i m -> AT.Parser i m
+(<<>>) :: (Semigroup m, Applicative f) => f m -> f m -> f m
 (<<>>) = liftA2 (<>)
 
 -- | Parse zero or more values and fold them
-foldMany :: (Monoid m) => AT.Parser i m -> AT.Parser i m
+foldMany :: (Monoid m, Alternative f) => f m -> f m
 foldMany = fmap fold . many
 
 -- | Parse one or more values and fold them
-foldMany1 :: (Semigroup m) => AT.Parser i m -> AT.Parser i m
-foldMany1 = fmap (fold1 . fromList) . many1
+foldMany1 :: (Semigroup m, Alternative f) => f m -> f m
+foldMany1 = fmap (fold1 . fromList) . A.many1
 
 -- | Skip until the given parser succeeds
 --
