@@ -57,8 +57,7 @@ import qualified Data.Text.Encoding as T
 
 import Data.MIME.Charset
 import Data.MIME.Internal
-import Data.RFC5322 (isQtext, isVchar)
-import Data.RFC5322.Internal (ci)
+import Data.RFC5322.Internal (ci, isQtext, isVchar)
 
 type RawParameters = [(CI B.ByteString, B.ByteString)]
 -- | Header parameters.  Used for some headers including Content-Type

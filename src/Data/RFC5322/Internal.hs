@@ -1,3 +1,9 @@
+{-# LANGUAGE CPP #-}
+{-# LANGUAGE ConstraintKinds #-}
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE FunctionalDependencies #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
 module Data.RFC5322.Internal
@@ -6,6 +12,24 @@ module Data.RFC5322.Internal
     ci
   , CI
   , original
+
+  -- * Abstract character parsers
+  , wsp
+  , optionalFWS
+  , optionalCFWS
+  , crlf
+  , vchar
+  , quotedString
+  , phrase
+  , dotAtom
+  , localPart
+  , domainLiteral
+
+  -- ** Helpers for building parsers
+  , isAtext
+  , isQtext
+  , isVchar
+  , isWsp
 
   -- * Semigroup and monoid folding combinators
   , (<<>>)
@@ -22,24 +46,196 @@ module Data.RFC5322.Internal
 
   ) where
 
-import Control.Applicative ((<|>), Alternative, liftA2, many)
+import Prelude hiding (takeWhile)
+import Control.Applicative ((<|>), Alternative, liftA2, many, optional)
 import Control.Monad (void)
-import Data.Attoparsec.ByteString as A
-import Data.Attoparsec.Internal as A
+import Control.Lens.Cons (Cons, cons)
+import qualified Data.Attoparsec.ByteString as A
+import qualified Data.Attoparsec.Internal as A
 import qualified Data.Attoparsec.Internal.Types as AT
+import qualified Data.Attoparsec.Text as AText
 import qualified Data.ByteString as B
+import Data.ByteString.Internal (c2w, w2c)
 import Data.ByteString.Search (indices)
 import Data.CaseInsensitive (CI, FoldCase, mk, original)
+import Data.Char (chr)
 import Data.Foldable (fold)
 import Data.Functor (($>))
 import Data.List.NonEmpty (fromList)
 import Data.Semigroup (Semigroup((<>)))
 import Data.Semigroup.Foldable (fold1)
+import qualified Data.Text as T
+import Data.Word (Word8)
+
+
+-- | Constraint synonym to handle the Semigroup Monoid Proposal
+-- transition gracefully.
+#if MIN_VERSION_base(4,11,0)
+type SM a = Monoid a
+#else
+type SM a = (Semigroup a, Monoid a)
+#endif
+
+class IsChar a where
+  toChar :: a -> Char
+  fromChar :: Char -> a
+
+instance IsChar Char where
+  toChar = id
+  fromChar = id
+
+instance IsChar Word8 where
+  toChar = w2c
+  fromChar = c2w
+
+class IsChar a => CharParsing f s a | s -> a, a -> f s where
+  singleton :: Char -> s
+  satisfy :: (Char -> Bool) -> (f s) a
+  takeWhile :: (Char -> Bool) -> (f s) s
+  takeWhile1 :: (Char -> Bool) -> (f s) s
+
+instance CharParsing AT.Parser B.ByteString Word8 where
+  singleton = B.singleton . c2w
+  satisfy f = A.satisfy (f . w2c)
+  takeWhile f = A.takeWhile (f . w2c)
+  takeWhile1 f = A.takeWhile1 (f . w2c)
+
+instance CharParsing AT.Parser T.Text Char where
+  singleton = T.singleton
+  satisfy = AText.satisfy
+  takeWhile = AText.takeWhile
+  takeWhile1 = AText.takeWhile1
+
+char :: CharParsing f s a => Char -> (f s) a
+char c = satisfy (== c)
+
+isWsp :: IsChar c => c -> Bool
+isWsp = AText.inClass "\t " . toChar
+
+wsp :: CharParsing f s a => (f s) a
+wsp = satisfy isWsp
+
+isVchar :: IsChar c => c -> Bool
+isVchar c =
+  let c' = toChar c
+  in c' >= chr 0x21 && c' <= chr 0x7e
+
+vchar :: CharParsing f s a => (f s) a
+vchar = satisfy isVchar
+
+dquote :: CharParsing f s a => (f s) a
+dquote = char '"'
+
+quotedPair :: (Alternative (f s)) => CharParsing f s a => (f s) a
+quotedPair = char '\\' *> (vchar <|> wsp)
+
+-- §3.2.4.  Quoted Strings
+
+isQtext :: IsChar c => c -> Bool
+isQtext c' =
+  let c = toChar c'
+  in
+    c == chr 33
+    || (c >= chr 35 && c <= chr 91)
+    || (c >= chr 93 && c <= chr 126)
+
+quotedString :: (Alternative (f s), CharParsing f s a, SM s) => (f s) s
+quotedString =
+  optionalCFWS *> dquote
+  *> foldMany (optionalFWS <<>> qcontent) <<>> optionalFWS
+  <* dquote <* optionalCFWS
+  where
+    qcontent =
+      (singleton . toChar <$> satisfy isQtext)
+      <|> (singleton . toChar <$> quotedPair)
+
+isAtext :: IsChar c => c -> Bool
+isAtext = AText.inClass "-A-Za-z0-9!#$%&'*+/=?^_`{|}~" . toChar
+
+atext :: CharParsing f s a => (f s) a
+atext = satisfy isAtext
+
+-- | Either CRLF or LF (lots of mail programs transform CRLF to LF)
+crlf :: (Alternative (f s)) => CharParsing f s a => (f s) ()
+crlf = void ((char '\r' *> char '\n') <|> char '\n')
+
+-- §3.2.2.  Folding White Space and Comments
+--
+-- "The general rule is that wherever this specification allows for folding
+-- white space (not simply WSP characters), a CRLF may be inserted before any
+-- WSP."
+
+fws :: (Alternative (f s), CharParsing f s a) => (f s) s
+fws = optional (takeWhile isWsp *> crlf)
+      *> takeWhile1 isWsp
+      *> pure (singleton ' ')
+
+-- | FWS collapsed to a single SPACE character, or empty string
+--
+optionalFWS :: (Alternative (f s), CharParsing f s a, Monoid s) => (f s) s
+optionalFWS = fws <|> pure mempty
+
+-- | Printable ASCII excl. '(', ')', '\'
+isCtext :: Char -> Bool
+isCtext c =
+  c >= chr 33 && c <= chr 39
+  || c >= chr 42 && c <= chr 91
+  || c >= chr 93 && c <= chr 126
+
+ccontent :: (Alternative (f s), CharParsing f s a, SM s) => (f s) s
+ccontent = (singleton . toChar <$> satisfy isCtext) <|> comment
+
+comment :: (Alternative (f s), CharParsing f s a, SM s) => (f s) s
+comment =
+  char '(' *> foldMany (optionalFWS <<>> ccontent) <* optionalFWS <* char ')'
+
+cfws :: (Alternative (f s), CharParsing f s a, SM s) => (f s) s
+cfws =
+  foldMany1 (optionalFWS <<>> comment) *> optionalFWS *> pure (singleton ' ')
+  <|> fws
+
+-- | CFWS collapsed to a single SPACE character, or empty string
+--
+optionalCFWS :: (Alternative (f s), CharParsing f s a, SM s) => (f s) s
+optionalCFWS = cfws <|> pure mempty
+
+atom :: (Alternative (f s), CharParsing f s a, SM s) => (f s) s
+atom = optionalCFWS *> foldMany1 (singleton . toChar <$> atext) <* optionalCFWS
+
+word :: (Alternative (f s), CharParsing f s a, SM s) => (f s) s
+word = atom <|> quotedString
+
+phrase :: (Alternative (f s), CharParsing f s a, SM s) => (f s) s
+phrase = foldMany1 word
+
+dotAtomText :: (Alternative (f s), CharParsing f s a, SM s, Cons s s a a) => (f s) s
+dotAtomText =
+  takeWhile1 isAtext
+  <<>> foldMany (char '.' *> (cons (fromChar '.') <$> takeWhile1 isAtext))
+
+dotAtom :: (Alternative (f s), CharParsing f s a, SM s, Cons s s a a) => (f s) s
+dotAtom = optionalCFWS *> dotAtomText <* optionalCFWS
+
+localPart :: (Alternative (f s), CharParsing f s a, SM s, Cons s s a a) => (f s) s
+localPart = dotAtom <|> quotedString
+
+-- | Printable US-ASCII excl "[", "]", or "\"
+isDtext :: Char -> Bool
+isDtext c = (c >= chr 33 && c <= chr 90) || (c >= chr 94 && c <= chr 126)
+
+dText :: CharParsing f s a => (f s) a
+dText = satisfy isDtext
+
+domainLiteral :: (Alternative (f s), CharParsing f s a, SM s) => (f s) s
+domainLiteral =
+  optionalCFWS *> char '['
+  *> foldMany (optionalFWS <<>> (singleton . toChar <$> dText) <<>> optionalFWS)
+  <* char ']' <* optionalFWS
 
 
 -- | Modify a parser to produce a case-insensitive value
 --
-ci :: FoldCase s => Parser s -> Parser (CI s)
+ci :: FoldCase s => A.Parser s -> A.Parser (CI s)
 ci = fmap mk
 
 
@@ -62,7 +258,7 @@ foldMany1 = fmap (fold1 . fromList) . A.many1
 -- Right ()
 -- @@
 --
-skipTill :: Parser a -> Parser ()
+skipTill :: A.Parser a -> A.Parser ()
 skipTill = void . spanTill
 
 -- | Current offset in the input
@@ -80,10 +276,10 @@ position = AT.Parser $ \t pos more _lose suc -> suc t pos more (AT.fromPos pos)
 -- Left "not enough input"
 -- @@
 --
-spanTill :: Parser a -> Parser Int
+spanTill :: A.Parser a -> A.Parser Int
 spanTill p = liftA2 (flip (-)) position q
   where
-  q = position <* p <|> anyWord8 *> q
+  q = position <* p <|> A.anyWord8 *> q
 
 -- | Run the parser from the specified offset.
 --
@@ -95,7 +291,7 @@ spanTill p = liftA2 (flip (-)) position q
 -- Right "bar"
 -- @@
 --
-seek :: Int -> Parser ()
+seek :: Int -> A.Parser ()
 seek pos = AT.Parser $ \t _pos more _lose win -> win t (AT.Pos pos) more ()
 
 -- | Take until the parser matches (fails if it never matches).
@@ -105,7 +301,7 @@ seek pos = AT.Parser $ \t _pos more _lose win -> win t (AT.Pos pos) more ()
 -- Right "foo"
 -- @@
 --
-takeTill' :: Parser a -> Parser B.ByteString
+takeTill' :: A.Parser a -> A.Parser B.ByteString
 takeTill' p = do
   pos <- position
   off <- spanTill p
@@ -125,7 +321,7 @@ takeTill' p = do
 -- Left "not enough input"
 -- @@
 --
-spanTillString :: B.ByteString -> Parser Int
+spanTillString :: B.ByteString -> A.Parser Int
 spanTillString pat
   | B.null pat = position
   | otherwise = go
@@ -150,7 +346,7 @@ spanTillString pat
 -- Right ()
 -- @@
 --
-skipTillString :: B.ByteString -> Parser ()
+skipTillString :: B.ByteString -> A.Parser ()
 skipTillString = void . spanTillString
 
 -- | Efficient take, using Boyer-Moore to locate the pattern.
@@ -160,7 +356,7 @@ skipTillString = void . spanTillString
 -- Right "foo"
 -- @@
 --
-takeTillString :: B.ByteString -> Parser B.ByteString
+takeTillString :: B.ByteString -> A.Parser B.ByteString
 takeTillString pat = do
   pos <- position
   off <- spanTillString pat
@@ -170,7 +366,7 @@ takeTillString pat = do
 -- | /O(1)/ Take the rest of the buffer, but do not demand
 -- any more input.
 --
-takeBuffer :: Parser B.ByteString
+takeBuffer :: A.Parser B.ByteString
 takeBuffer = do
   start <- position
   end <- bufSize
