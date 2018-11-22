@@ -83,8 +83,6 @@ module Data.RFC5322
   , quotedString
 
   -- * Helpers
-  , isVchar
-  , isQtext
   , field
   , rfc5422DateTimeFormat
 
@@ -99,7 +97,6 @@ module Data.RFC5322
   ) where
 
 import Control.Applicative
-import Control.Monad (void)
 import Data.Foldable (fold)
 import Data.List (findIndex, intersperse)
 import Data.List.NonEmpty (intersperse)
@@ -178,25 +175,11 @@ body :: Lens (Message ctx a) (Message ctx' b) a b
 body f (Message h b) = fmap (\b' -> Message h b') (f b)
 {-# ANN body ("HLint: ignore Avoid lambda" :: String) #-}
 
-
--- | Either CRLF or LF (lots of mail programs transform CRLF to LF)
-crlf :: Parser ()
-crlf = void (string "\r\n" <|> string "\n")
-
 isSpecial :: Word8 -> Bool
 isSpecial = inClass "()<>[]:;@\\,.\""
 
-isAtext :: Word8 -> Bool
-isAtext = inClass "-A-Za-z0-9!#$%&'*+/=?^_`{|}~"
-
-isWsp :: Word8 -> Bool
-isWsp = inClass "\t "
-
 special :: Parser Word8
 special = satisfy isSpecial
-
-atext :: Parser Word8
-atext = satisfy isAtext
 
 
 -- §3.3  Date and Time Specification
@@ -237,25 +220,10 @@ mailbox = Mailbox <$> optional displayName <*> angleAddr
 displayName :: Parser T.Text
 displayName = decodeLenient <$> phrase
 
-word :: Parser B.ByteString
-word = atom <|> quotedString
-
-phrase :: Parser B.ByteString
-phrase = foldMany1 word
-
 angleAddr :: Parser AddrSpec
 angleAddr = optionalCFWS *>
   char8 '<' *> addressSpec <* char8 '>'
   <* optionalCFWS
-
-atom :: Parser B.ByteString
-atom = optionalCFWS *> foldMany1 (B.singleton <$> atext) <* optionalCFWS
-
-dotAtomText :: Parser B.ByteString
-dotAtomText = takeWhile1 isAtext <<>> foldMany (char8 '.' *> (Char8.cons '.' <$> takeWhile1 isAtext))
-
-dotAtom :: Parser B.ByteString
-dotAtom = optionalCFWS *> dotAtomText <* optionalCFWS
 
 renderAddressSpec :: AddrSpec -> Builder.Builder
 renderAddressSpec (AddrSpec lp (DomainDotAtom b))
@@ -270,21 +238,9 @@ renderAddressSpec (AddrSpec lp (DomainLiteral b)) =
 addressSpec :: Parser AddrSpec
 addressSpec = AddrSpec <$> localPart <*> (char8 '@' *> domain)
 
-localPart :: Parser B.ByteString
-localPart = dotAtom <|> quotedString
-
 -- | Printable US-ASCII excl "[", "]", or "\"
 isDtext :: Word8 -> Bool
 isDtext c = (c >= 33 && c <= 90) || (c >= 94 && c <= 126)
-
-dText :: Parser Word8
-dText = satisfy isDtext
-
-domainLiteral :: Parser B.ByteString
-domainLiteral =
-  optionalCFWS *> char8 '['
-  *> foldMany (optionalFWS <<>> (B.singleton <$> dText) <<>> optionalFWS)
-  <* char8 ']' <* optionalFWS
 
 domain :: Parser Domain
 domain = (DomainDotAtom <$> (pure <$> dotAtom))
@@ -336,49 +292,6 @@ buildField (k,v) =
     <> Builder.byteString (foldUnstructured (B.length key) v)
     <> "\r\n"
 
--- | SP or TAB
-wsp :: Parser Word8
-wsp = satisfy isWsp
-
-
--- §3.2.2.  Folding White Space and Comments
---
--- "The general rule is that wherever this specification allows for folding
--- white space (not simply WSP characters), a CRLF may be inserted before any
--- WSP."
-
-
-fws :: Parser B.ByteString
-fws = optional (A.takeWhile isWsp *> crlf) *> takeWhile1 isWsp *> pure " "
-
--- | FWS collapsed to a single SPACE character, or empty string
---
-optionalFWS :: Parser B.ByteString
-optionalFWS = fws <|> pure mempty
-
--- | Printable ASCII excl. '(', ')', '\'
-isCtext :: Word8 -> Bool
-isCtext c = (c >= 33 && c <= 39) || (c >= 42 && c <= 91) || (c >= 93 && c <= 126)
-
-ccontent :: Parser B.ByteString
-ccontent = (B.singleton <$> satisfy isCtext) <|> comment
-
-comment :: Parser B.ByteString
-comment =
-  char8 '('
-  *> foldMany (optionalFWS <<>> ccontent) <* optionalFWS
-  <* char8 ')'
-
-cfws :: Parser B.ByteString
-cfws =
-  foldMany1 (optionalFWS <<>> comment) *> optionalFWS *> pure " "
-  <|> fws
-
--- | CFWS collapsed to a single SPACE character, or empty string
---
-optionalCFWS :: Parser B.ByteString
-optionalCFWS = cfws <|> pure mempty
-
 
 -- | Render a field body with proper folding
 --
@@ -405,27 +318,6 @@ chunk max' (x:rest) xs result = if (max' + B.length x + 1) >= 77
                                 then result <> [Char8.unwords xs] <> chunk (B.length x + 1) rest [x] []
                                 else result <> chunk (max' + B.length x + 1) rest (xs <> [x]) result
 
--- §3.2.4.  Quoted Strings
-
-isQtext :: Word8 -> Bool
-isQtext c = c == 33 || (c >= 35 && c <= 91) || (c >= 93 && c <= 126)
-
-quotedString :: Parser B.ByteString
-quotedString =
-  optionalCFWS *> dquote
-  *> foldMany (optionalFWS <<>> qcontent) <<>> optionalFWS
-  <* dquote <* optionalCFWS
-  where
-    qcontent = B.singleton <$> satisfy isQtext <|> B.singleton <$> quotedPair
-
-quotedPair :: Parser Word8
-quotedPair = char8 '\\' *> (vchar <|> wsp)
-
-dquote :: Parser Word8
-dquote = char8 '"'
-
--- §3.6.8.  Optional fields
-
 -- | Printable ASCII excl. ':'
 isFtext :: Word8 -> Bool
 isFtext c = (c >= 33 && c <= 57) || (c >= 59 && c <= 126)
@@ -440,12 +332,6 @@ unstructured :: Parser B.ByteString
 unstructured =
   foldMany (optionalFWS <<>> (B.singleton <$> vchar))
   <<>> A.takeWhile isWsp
-
-isVchar :: Word8 -> Bool
-isVchar c = c >= 0x21 && c <= 0x7e
-
-vchar :: Parser Word8
-vchar = satisfy isVchar
 
 
 -- | Given a parser, construct a 'Fold'
