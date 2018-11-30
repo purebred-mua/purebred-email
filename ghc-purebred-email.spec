@@ -8,7 +8,7 @@
 
 Name:           ghc-%{pkg_name}
 Version:        0.1.0.0
-Release:        0.20180113%{?dist}
+Release:        0.20181201%{?dist}
 Summary:        Types and parser for email messages (including MIME)
 
 License:        AGPLv3
@@ -27,6 +27,7 @@ BuildRequires:  ghc-concise-devel
 BuildRequires:  ghc-lens-devel
 BuildRequires:  ghc-semigroupoids-devel
 BuildRequires:  ghc-semigroups-devel
+BuildRequires:  ghc-stringsearch-devel
 %if %{with tests}
 BuildRequires:  ghc-QuickCheck-devel
 BuildRequires:  ghc-quickcheck-instances-devel
