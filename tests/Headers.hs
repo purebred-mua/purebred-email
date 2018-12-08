@@ -39,6 +39,7 @@ unittests = testGroup "Headers"
   , ixAndAt
   , contentTypeTests
   , parameterTests
+  , testReferencesField
   , testProperty "field rendering round-trip" prop_renderHeadersRoundtrip
   , testProperty "folded fields no longer than 78 chars" prop_foldedUnstructuredLimited
   ]
@@ -230,6 +231,43 @@ parameterTests = testGroup "parameter handling"
         (Headers [("Content-Disposition", "attachment; foo=bar; filename=foo.pdf")])
       @?= Headers [("Content-Disposition", "attachment; foo=bar")]
   ]
+
+-- RFC5322 - 3.6.4. Identification Fields
+testReferencesField :: TestTree
+testReferencesField =
+  testGroup "references field in reply" $
+  (\(desc, hdrs, expected) ->
+     testCase desc $ expected @=? view replyHeaderReferences hdrs) <$>
+  fixtures
+  where
+    fixtures =
+      [ ("no ident fields", empty, Nothing)
+      , ( "messageid only"
+        , empty & set (at "message-id") (Just "asdf")
+        , Just "asdf")
+      , ( "references only"
+        , empty & set (at "references") (Just "references")
+        , Just "references")
+      , ( "references & message id"
+        , empty &
+          set (at "references") (Just "references") .
+          set (at "message-id") (Just "messageid")
+        , Just "references messageid")
+      , ( "in-reply-to and no references"
+        , empty & set (at "in-reply-to") (Just "replyto")
+        , Just "replyto")
+      , ( "in-reply-to and message-id"
+        , empty &
+          set (at "in-reply-to") (Just "replyto") .
+          set (at "message-id") (Just "message-id")
+        , Just "replyto message-id")
+      , ( "in-reply-to and references"
+        , empty &
+          set (at "in-reply-to") (Just "replyto") .
+          set (at "references") (Just "references") .
+          set (at "message-id") (Just "messageid")
+        , Just "references messageid")
+      ]
 
 multipleMailboxes :: [Mailbox]
 multipleMailboxes =
