@@ -78,6 +78,7 @@ module Data.MIME
   , headerCC
   , headerBCC
   , headerDate
+  , replyHeaderReferences
   , createAttachmentFromFile
   , createAttachment
   , createTextPlainMessage
@@ -91,7 +92,7 @@ module Data.MIME
 
 import Control.Applicative
 import Control.Monad (void)
-import Data.Maybe (fromMaybe)
+import Data.Maybe (fromMaybe, catMaybes)
 import Data.Semigroup ((<>))
 import GHC.Generics (Generic)
 
@@ -678,6 +679,24 @@ headerDate = lens getter setter
         parseTimeOrError True defaultTimeLocale rfc5422DateTimeFormat
         . C8.unpack . view (header "date")
     setter hdrs x = set (header "date") (renderRFC5422Date x) hdrs
+
+-- | Returns a space delimited `B.ByteString` with values from identification
+-- fields from the parents message `Headers`. Rules to gather the values are in
+-- accordance to RFC5322 - 3.6.4 as follows sorted by priority (first has
+-- precedence):
+-- * Values from 'References' and `Message-ID` (if any)
+-- * Values from 'In-Reply-To' and 'Message-ID' (if any)
+-- * Value from 'Message-ID' (in case it's the first reply to a parent mail)
+-- * otherwise Nothing is returned indicating that the replying mail should not have a 'References' field.
+--
+replyHeaderReferences :: Getter Headers (Maybe C8.ByteString)
+replyHeaderReferences = to $ \hdrs ->
+  let xs = catMaybes
+        [preview (header "references") hdrs
+         <|> preview (header "in-reply-to") hdrs
+        , preview (header "message-id") hdrs
+        ]
+  in if null xs then Nothing else Just (B.intercalate " " xs)
 
 -- | Create a mixed `MIMEMessage` with an inline text/plain part and multiple
 -- `attachments`
