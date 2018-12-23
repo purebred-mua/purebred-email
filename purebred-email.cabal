@@ -9,21 +9,24 @@ description:
   .
   Things that are currently implemented:
   .
-  - RFC 5322 message parsing
+  - RFC 5322 message parsing and serialisation
   - MIME multipart parsing (RFC 2046)
   - MIME message header extensions for non-ASCII text (RFC 2047)
   - MIME parameter value and encoded word extensions (RFC 2231)
   - Content-Disposition header field (RFC 2183)
   .
-  Things that are not yet implemented:
+  Things that are not yet implemented / need improvement:
   .
-  - Message printing / serialisation
+  - Support for more charsets
+  - Improve handling of dates
+  - Sensible heuristics for choosing a content transfer encoding
+  - Probably lots of other things
 
 license:             AGPL-3
 license-file:        LICENSE
 author:              Fraser Tweedale
 maintainer:          frase@frase.id.au
-copyright:           Copyright 2017  Fraser Tweedale
+copyright:           Copyright 2017-2018  Fraser Tweedale
 category:            Data, Email
 build-type:          Simple
 extra-source-files:
