@@ -554,7 +554,7 @@ filenameParameter = parameter "filename"
 
 
 -- | Get the boundary, if specified
-mimeBoundary :: Fold ContentType B.ByteString
+mimeBoundary :: Traversal' ContentType B.ByteString
 mimeBoundary = parameters . rawParameter "boundary"
 
 -- | Top-level MIME body parser that uses headers to decide how to
