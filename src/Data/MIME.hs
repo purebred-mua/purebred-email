@@ -613,7 +613,7 @@ multipart takeTillEnd boundary =
     multipartBody =
       skipTillString dashBoundary *> crlf -- FIXME transport-padding
       *> part `sepBy` crlf
-      <* string "--" <* crlf <* void takeTillEnd
+      <* string "--" <* takeTillEnd
 
 -- | Serialise a given `MIMEMessage` into a ByteString. The message is
 -- serialised as is. No additional headers are set.
