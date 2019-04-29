@@ -106,7 +106,7 @@ install:
 script:
   # test that source-distributions can be generated
   - (cd "." && cabal sdist)
-  - mv "."/dist/purebred-email-*.tar.gz ${DISTDIR}/
+  - mv ./dist/purebred-email-*.tar.gz ${DISTDIR}/ || mv ./dist-newstyle/sdist/purebred-email-*.tar.gz ${DISTDIR}/
   - cd ${DISTDIR} || false
   - find . -maxdepth 1 -name '*.tar.gz' -exec tar -xvf '{}' \;
   - "printf 'packages: purebred-email-*/*.cabal\\n' > cabal.project"
