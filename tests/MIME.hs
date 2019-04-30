@@ -19,20 +19,28 @@
 
 module MIME where
 
+import Control.Monad ((<=<), void)
 import Data.Char (toUpper)
 
 import Control.Lens
+import qualified Data.ByteString as B
 import qualified Data.Text as T
 
 import Test.Tasty (TestTree, testGroup)
-import Test.Tasty.HUnit ((@?=), testCase)
+import Test.Tasty.HUnit ((@?=), Assertion, assertFailure, testCase)
 import Test.Tasty.QuickCheck
 import Test.QuickCheck.Instances ()
 
 import Data.MIME
 
 unittests :: TestTree
-unittests =
+unittests = testGroup "MIME tests"
+  [ testContentDisposition
+  , testParse
+  ]
+
+testContentDisposition :: TestTree
+testContentDisposition =
   testGroup "content disposition"
     [ testCase "read empty (plain; should fail)" $
         preview lFilename
@@ -133,3 +141,13 @@ unittests =
   where
     lFilename = headers . contentDisposition . filename
     stripPath = snd . T.breakOnEnd "/"
+
+testParse :: TestTree
+testParse = testGroup "parsing tests"
+  [ testCase "nested multipart" $
+      testParseFile "test-vectors/nested-multipart.eml"
+  ]
+
+testParseFile :: FilePath -> Assertion
+testParseFile =
+  either assertFailure (void . pure) . parse (message mime) <=< B.readFile

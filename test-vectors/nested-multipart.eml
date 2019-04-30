@@ -1,0 +1,16 @@
+Content-Type: multipart/mixed; boundary=boundary1
+MIME-Version: 1.0
+Date: Thu, 4 May 2017 03:08:43 +1000 (EST)
+From: foo@bar
+To: my@email.test
+Subject: Pretty subject
+
+--boundary1
+Content-Type: multipart/alternative; boundary=boundary2
+
+--boundary2
+Content-Type: text/plain
+
+Bla bla bla
+--boundary2--
+--boundary1--
