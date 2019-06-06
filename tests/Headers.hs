@@ -114,6 +114,10 @@ mailboxFixtures =
     , ( "wrong: comma in front of domain"
       , assertBool "Parse error expected" . isLeft
       , "foo@,bar,com")
+    , ( "displayName without quotes but with spaces"
+      , (Right (Mailbox (Just "John Doe") (AddrSpec "jdoe" (DomainDotAtom $ pure "machine.example"))) @=?)
+      , "John Doe <jdoe@machine.example>"
+      )
     ]
 
 parsesMailboxesSuccessfully :: TestTree

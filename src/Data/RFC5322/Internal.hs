@@ -61,6 +61,7 @@ import Data.CaseInsensitive (CI, FoldCase, mk, original)
 import Data.Char (chr)
 import Data.Foldable (fold)
 import Data.Functor (($>))
+import Data.List (intersperse)
 import Data.List.NonEmpty (fromList)
 import Data.Semigroup (Semigroup((<>)))
 import Data.Semigroup.Foldable (fold1)
@@ -206,7 +207,7 @@ word :: (Alternative (f s), CharParsing f s a, SM s) => (f s) s
 word = atom <|> quotedString
 
 phrase :: (Alternative (f s), CharParsing f s a, SM s) => (f s) s
-phrase = foldMany1 word
+phrase = foldMany1Sep (singleton ' ') word
 
 dotAtomText :: (Alternative (f s), CharParsing f s a, SM s, Cons s s a a) => (f s) s
 dotAtomText =
@@ -250,6 +251,10 @@ foldMany = fmap fold . many
 -- | Parse one or more values and fold them
 foldMany1 :: (Semigroup m, Alternative f) => f m -> f m
 foldMany1 = fmap (fold1 . fromList) . A.many1
+
+-- | Parse one or more values and fold them with a separating element
+foldMany1Sep :: (Semigroup m, Alternative f) => m -> f m -> f m
+foldMany1Sep sep = fmap (fold1 . fromList . intersperse sep) . A.many1
 
 -- | Skip until the given parser succeeds
 --
