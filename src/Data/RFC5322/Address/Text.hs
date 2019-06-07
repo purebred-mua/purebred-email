@@ -11,6 +11,8 @@ module Data.RFC5322.Address.Text
   -- * Pretty printing
   , renderMailbox
   , renderMailboxes
+  , renderAddress
+  , renderAddresses
   ) where
 
 import Control.Applicative ((<|>), optional)
@@ -45,6 +47,13 @@ buildMailbox (Mailbox n a) =
   maybe a' (\n' -> "\"" <> Builder.fromText n' <> "\" " <> "<" <> a' <> ">") n
   where
     a' = renderAddressSpec a
+
+renderAddresses :: [Address] -> T.Text
+renderAddresses xs = T.intercalate ", " $ renderAddress <$> xs
+
+renderAddress :: Address -> T.Text
+renderAddress (Single m) = renderMailbox m
+renderAddress (Group name xs) = name <> ":" <> renderMailboxes xs <> ";"
 
 renderAddressSpec :: AddrSpec -> Builder.Builder
 renderAddressSpec (AddrSpec lp (DomainDotAtom b))
