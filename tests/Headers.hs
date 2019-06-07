@@ -23,7 +23,8 @@ import Test.Tasty.QuickCheck
 import Test.QuickCheck.Instances ()
 
 import Data.MIME
-import qualified Data.RFC5322.Address.Text as AddressText (mailbox, address)
+import qualified Data.RFC5322.Address.Text as AddressText
+  (mailbox, address, renderAddress)
 
 renderField :: (CI.CI B.ByteString, B.ByteString) -> B.ByteString
 renderField = toStrict . Builder.toLazyByteString . buildField
@@ -34,6 +35,7 @@ unittests = testGroup "Headers"
   , parsesTextMailboxesSuccessfully
   , parsesAddressesSuccessfully
   , parsesTextAddressesSuccessfully
+  , rendersAddressesToTextSuccessfully
   , testRenderMailboxes
   , rendersFieldsSuccessfully
   , ixAndAt
@@ -74,6 +76,34 @@ testRenderMailboxes = testCase "test renderMailboxes" $
     xs = [ Mailbox (Just "Roman Joost") (AddrSpec "foo" (DomainDotAtom ("bar" :| ["com"])))
          , Mailbox Nothing (AddrSpec "bar" (DomainDotAtom ("bar" :| ["com"])))
          ]
+
+rendersAddressesToTextSuccessfully :: TestTree
+rendersAddressesToTextSuccessfully =
+  testGroup "renders addresses to text" $
+  (\(desc, address, expected) ->
+     testCase desc $ expected @=? (AddressText.renderAddress address)) <$>
+  xs
+  where
+    xs =
+      [ ( "single address"
+        , (Single
+             (Mailbox Nothing (AddrSpec "foo" (DomainDotAtom $ pure "bar.com"))))
+        , "foo@bar.com")
+      , ( "group of addresses"
+        , (Group
+             "Group"
+             [ Mailbox
+                 (Just "Mr Foo")
+                 (AddrSpec "foo" (DomainDotAtom $ pure "bar.com"))
+             , Mailbox
+                 (Just "Mr Bar")
+                 (AddrSpec "bar" (DomainDotAtom $ pure "bar.com"))
+             ])
+        , "Group:\"Mr Foo\" <foo@bar.com>, \"Mr Bar\" <bar@bar.com>;")
+      , ( "group of undisclosed recipients"
+        , (Group "undisclosed-recipients" [])
+        , "undisclosed-recipients:;")
+      ]
 
 -- | Note some examples are taken from https://tools.ietf.org/html/rfc3696#section-3
 mailboxFixtures :: IsString s => [(String, Either String Mailbox -> Assertion, s)]
