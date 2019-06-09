@@ -101,7 +101,7 @@ transferEncodeEncodedWord (TransferDecodedEncodedWord charset lang s) =
 -- encoded-words and decodes them.
 --
 -- @
--- λ> T.putStrLn $ decodeEncodedWords "hello =?utf-8?B?5LiW55WM?=!"
+-- λ> T.putStrLn $ decodeEncodedWords defaultCharsets "hello =?utf-8?B?5LiW55WM?=!"
 -- hello 世界!
 -- @
 --
@@ -109,22 +109,22 @@ transferEncodeEncodedWord (TransferDecodedEncodedWord charset lang s) =
 -- is left unchanged in the result.
 --
 -- @
--- λ> T.putStrLn $ decodeEncodedWords "=?utf-8?B?bogus?="
+-- λ> T.putStrLn $ decodeEncodedWords defaultCharsets "=?utf-8?B?bogus?="
 -- =?utf-8?B?bogus?=
 --
--- λ> T.putStrLn $ decodeEncodedWords "=?utf-8?X?unrecognised_encoding?="
+-- λ> T.putStrLn $ decodeEncodedWords defaultCharsets "=?utf-8?X?unrecognised_encoding?="
 -- =?utf-8?X?unrecognised_encoding?=
 -- @
 --
 -- Language specification is supported (the datum is discarded).
 --
 -- @
--- λ> T.putStrLn $ decodeEncodedWords "=?utf-8*es?Q?hola_mundo!?="
+-- λ> T.putStrLn $ decodeEncodedWords defaultCharsets "=?utf-8*es?Q?hola_mundo!?="
 -- hola mundo!
 -- @
 --
-decodeEncodedWords :: B.ByteString -> T.Text
-decodeEncodedWords s =
+decodeEncodedWords :: CharsetLookup -> B.ByteString -> T.Text
+decodeEncodedWords charsets s =
   either (const $ decodeLenient s) merge $ fmap (g . f) <$> parseOnly tokens s
   where
     -- parse the ByteString into a series of tokens
@@ -140,6 +140,6 @@ decodeEncodedWords s =
     g (Left t) = Left t
     g (Right w) = first
       (const $ serialiseEncodedWord $ transferEncodeEncodedWord w :: CharsetError -> B.ByteString)
-      (view charsetDecoded w)
+      (view (charsetDecoded charsets) w)
 
     merge = foldMap (either decodeLenient id)

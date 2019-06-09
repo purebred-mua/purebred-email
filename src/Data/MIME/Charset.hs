@@ -1,5 +1,6 @@
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeFamilies #-}
 
@@ -23,6 +24,9 @@ module Data.MIME.Charset
   , CharsetError(..)
   , AsCharsetError(..)
   , charsetPrism
+
+  , CharsetLookup
+  , defaultCharsets
 
   , decodeLenient
   ) where
@@ -76,29 +80,34 @@ class HasCharset a where
   charsetData :: Getter a B.ByteString
 
   -- | Structure with the encoded data replaced with 'Text'
-  charsetDecoded :: AsCharsetError e => Getter a (Either e (Decoded a))
+  charsetDecoded :: AsCharsetError e => CharsetLookup -> Getter a (Either e (Decoded a))
 
   -- | Encode the data
   charsetEncode :: Decoded a -> a
 
 
 -- | Decode the object according to the declared charset.
-charsetText :: (HasCharset a, AsCharsetError e) => Getter a (Either e T.Text)
-charsetText = to $ \a ->
+charsetText
+  :: (HasCharset a, AsCharsetError e)
+  => CharsetLookup -> Getter a (Either e T.Text)
+charsetText lookupCharset = to $ \a ->
   maybe (Left $ review _CharsetUnspecified ()) Right (view charsetName a)
   >>= \k -> maybe (Left $ review _CharsetUnsupported k) Right (lookupCharset k)
   >>= \f -> pure (f (view charsetData a))
 
 -- | Monomorphic in error type
-charsetText' :: (HasCharset a) => Getter a (Either CharsetError T.Text)
+charsetText'
+  :: (HasCharset a)
+  => CharsetLookup
+  -> Getter a (Either CharsetError T.Text)
 charsetText' = charsetText
 
 -- | Prism for charset decoded/encoded data.
 -- Information about decoding failures is discarded.
-charsetPrism :: forall a. (HasCharset a) => Prism' a (Decoded a)
-charsetPrism = prism' charsetEncode (either (const Nothing) Just . view l)
+charsetPrism :: forall a. (HasCharset a) => CharsetLookup -> Prism' a (Decoded a)
+charsetPrism m = prism' charsetEncode (either (const Nothing) Just . view l)
   where
-  l = charsetDecoded :: Getter a (Either CharsetError (Decoded a))
+  l = charsetDecoded m :: Getter a (Either CharsetError (Decoded a))
 
 charsets :: [(CI.CI B.ByteString, Charset)]
 charsets =
@@ -127,10 +136,13 @@ us_ascii = decodeLenient
 utf_8 = decodeLenient
 iso_8859_1 = T.decodeLatin1
 
--- | Look up a character set.
+
+type CharsetLookup = CI.CI B.ByteString -> Maybe Charset
+
+-- | Supports US-ASCII, UTF-8 and ISO-8859-1.
 --
-lookupCharset :: CI.CI B.ByteString -> Maybe Charset
-lookupCharset k = lookup k charsets
+defaultCharsets :: CharsetLookup
+defaultCharsets k = lookup k charsets
 
 -- | Decode as UTF-8, replacing invalid sequences with placeholders.
 --

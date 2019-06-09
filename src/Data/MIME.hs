@@ -85,6 +85,8 @@ module Data.MIME
   , createMultipartMixedMessage
 
   -- * Re-exports
+  , CharsetLookup
+  , defaultCharsets
   , module Data.RFC5322
   , module Data.MIME.Parameter
   , module Data.MIME.Error
@@ -380,7 +382,7 @@ instance HasCharset ByteEntity where
       else
         preview l params <|> Just "us-ascii"
   charsetData = body -- XXX: do we need to drop the BOM / encoding decl?
-  charsetDecoded = to $ \a -> (\t -> set body t a) <$> view charsetText a
+  charsetDecoded m = to $ \a -> (\t -> set body t a) <$> view (charsetText m) a
 
   -- | Encode (@utf-8@) and add/set charset parameter.  If consisting
   -- entirely of ASCII characters, the @charset@ parameter gets set to
@@ -536,8 +538,8 @@ contentDisposition =
 
 -- | Traverse the value of the filename parameter (if present).
 --
-filename :: HasParameters a => Traversal' a T.Text
-filename = filenameParameter . traversed . charsetPrism . value
+filename :: HasParameters a => CharsetLookup -> Traversal' a T.Text
+filename m = filenameParameter . traversed . charsetPrism m . value
 
 -- | Access the filename parameter as a @Maybe ('ParameterValue' B.ByteString)@.
 --

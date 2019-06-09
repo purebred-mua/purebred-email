@@ -183,7 +183,7 @@ charset f (ParameterValue a b c) = (\a' -> ParameterValue a' b c) <$> f a
 -- constructor directly.
 --
 newParameter :: T.Text -> EncodedParameterValue
-newParameter = review charsetPrism . ParameterValue Nothing Nothing
+newParameter = charsetEncode . ParameterValue Nothing Nothing
 
 
 -- | The default charset @us-ascii@ is implied by the abstract of
@@ -198,7 +198,7 @@ instance HasCharset EncodedParameterValue where
   type Decoded EncodedParameterValue = DecodedParameterValue
   charsetName = to $ \(ParameterValue name _ _) -> name <|> Just "us-ascii"
   charsetData = value
-  charsetDecoded = to $ \a -> (\t -> (set charset Nothing . set value t) a) <$> view charsetText a
+  charsetDecoded m = to $ \a -> (\t -> (set charset Nothing . set value t) a) <$> view (charsetText m) a
   charsetEncode (ParameterValue _ lang s) =
     let
       bs = T.encodeUtf8 s
