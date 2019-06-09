@@ -2,7 +2,7 @@
 -- documentation, see http://haskell.org/cabal/users-guide/
 
 name:                purebred-email
-version:             0.1.0.1
+version:             0.2.0.0
 synopsis:            types and parser for email messages (including MIME)
 description:
   The purebred email library.  RFC 5322, MIME, etc.
@@ -26,7 +26,7 @@ license:             AGPL-3
 license-file:        LICENSE
 author:              Fraser Tweedale
 maintainer:          frase@frase.id.au
-copyright:           Copyright 2017-2018  Fraser Tweedale
+copyright:           Copyright 2017-2019  Fraser Tweedale
 category:            Data, Email
 build-type:          Simple
 extra-source-files:

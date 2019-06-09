@@ -139,7 +139,7 @@ testContentDisposition =
         )
     ]
   where
-    lFilename = headers . contentDisposition . filename
+    lFilename = headers . contentDisposition . filename defaultCharsets
     stripPath = snd . T.breakOnEnd "/"
 
 testParse :: TestTree
