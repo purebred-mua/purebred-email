@@ -7,7 +7,9 @@ Parser for roundtripping Text based `Mailbox`es and addresses.
 module Data.RFC5322.Address.Text
   (
     mailbox
+  , mailboxList
   , address
+  , addressList
   -- * Pretty printing
   , renderMailbox
   , renderMailboxes
@@ -76,6 +78,9 @@ displayName = phrase
 
 mailboxList :: Parser [Mailbox]
 mailboxList = mailbox `sepBy` char ','
+
+addressList :: Parser [Address]
+addressList = address `sepBy` char ','
 
 group :: Parser Address
 group = Group <$> displayName <* char ':' <*> mailboxList <* char ';' <* optionalCFWS
