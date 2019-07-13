@@ -1,1 +1,1 @@
-Email handling library.  Groks RFC 5322 and MIME.
+Email handling library.  RFC 5322, MIME and more.

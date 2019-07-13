@@ -17,7 +17,6 @@ description:
   .
   Things that are not yet implemented / need improvement:
   .
-  - Support for more charsets
   - Improve handling of dates
   - Sensible heuristics for choosing a content transfer encoding
   - Probably lots of other things
