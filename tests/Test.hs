@@ -5,6 +5,7 @@ import ContentTransferEncodings as CTE
 import MIME
 import Headers
 import Generator
+import Parser
 
 main :: IO ()
 main =
@@ -13,4 +14,5 @@ main =
     , Headers.unittests
     , Generator.properties
     , MIME.unittests
+    , Parser.tests
     ]

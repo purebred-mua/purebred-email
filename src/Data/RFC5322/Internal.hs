@@ -329,20 +329,20 @@ takeTill' p = do
 spanTillString :: B.ByteString -> A.Parser Int
 spanTillString pat
   | B.null pat = position
-  | otherwise = go
+  | otherwise = position >>= go
   where
   search = indices pat
-  go = do
-    start <- position
+  go start = do
+    pos <- position
     buf <- takeBuffer
     case search buf of
       (offset:_) ->
         -- Pattern was found.  Seek to end of pattern and return the span
-        seek (start + offset + B.length pat) $> offset
+        seek (pos + offset + B.length pat) $> pos + offset - start
       _ ->
         -- We hit the end of the buffer without a match.  Seek to
-        -- (length buf - length pat + 1), demand more input and go again.
-        seek (B.length buf - B.length pat + 1) *> A.demandInput *> go
+        -- (length buf - length pat), demand more input and go again.
+        seek (max start (B.length buf - B.length pat)) *> A.demandInput *> go start
 
 -- | Efficient skip, using Boyer-Moore to locate the pattern.
 --

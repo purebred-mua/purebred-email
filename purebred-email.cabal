@@ -51,6 +51,7 @@ library
     Data.RFC5322
     , Data.RFC5322.Address.Text
     , Data.RFC5322.Address.Types
+    , Data.RFC5322.Internal
     , Data.MIME
     , Data.MIME.Error
     , Data.MIME.Charset
@@ -61,8 +62,7 @@ library
     , Data.MIME.Base64
     , Data.MIME.QuotedPrintable
   other-modules:
-    Data.RFC5322.Internal
-    , Data.MIME.Internal
+    Data.MIME.Internal
   -- other-extensions:    
   build-depends:
     base >= 4.8 && < 5
@@ -92,6 +92,7 @@ test-suite tests
     , Headers
     , MIME
     , Generator
+    , Parser
   build-depends:
     base
     , bytestring
