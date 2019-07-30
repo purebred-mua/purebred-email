@@ -39,6 +39,7 @@ import Control.Applicative ((<|>), optional)
 import Data.Foldable (fold)
 import Data.Functor (($>))
 import Data.Semigroup ((<>), Sum(..), Max(..))
+import Data.String (IsString(..))
 import Data.Word (Word8)
 import Data.Void (Void)
 import Foreign (withForeignPtr, plusPtr, minusPtr, peek, peekByteOff, poke)
@@ -170,6 +171,15 @@ data ParameterValue cs a = ParameterValue
 
 type EncodedParameterValue = ParameterValue CharsetName B.ByteString
 type DecodedParameterValue = ParameterValue Void T.Text
+
+-- | Parameter value with no language.
+instance IsString DecodedParameterValue where
+  fromString = ParameterValue Nothing Nothing . T.pack
+
+-- | Parameter value with no language, encoded either in @us-ascii@
+-- or @utf-8.
+instance IsString EncodedParameterValue where
+  fromString = charsetEncode . fromString
 
 value :: Lens (ParameterValue cs a) (ParameterValue cs b) a b
 value f (ParameterValue a b c) = ParameterValue a b <$> f c

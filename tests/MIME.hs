@@ -20,6 +20,7 @@
 module MIME where
 
 import Control.Monad ((<=<), void)
+import Data.Bifunctor (first)
 import Data.Char (toUpper)
 
 import Control.Lens
@@ -32,11 +33,13 @@ import Test.Tasty.QuickCheck
 import Test.QuickCheck.Instances ()
 
 import Data.MIME
+import Data.MIME.Charset
 
 unittests :: TestTree
 unittests = testGroup "MIME tests"
   [ testContentDisposition
   , testParse
+  , testParameterValueOverloadedStrings
   ]
 
 testContentDisposition :: TestTree
@@ -151,3 +154,24 @@ testParse = testGroup "parsing tests"
 testParseFile :: FilePath -> Assertion
 testParseFile =
   either assertFailure (void . pure) . parse (message mime) <=< B.readFile
+
+testParameterValueOverloadedStrings :: TestTree
+testParameterValueOverloadedStrings = testGroup "ParameterValue IsString instances"
+  [ testCase "DecodedParameterValue" $
+      let
+        -- start with DecodedParameterValue, then round-trip it
+        v' = charsetEncode "hello世界" :: EncodedParameterValue
+      in
+        meh (view (charsetDecoded defaultCharsets) v')
+          @?= Right (ParameterValue Nothing Nothing "hello世界")
+  , testCase "EncodedParameterValue" $
+      let
+        -- start with EncodedParameterValue, then decode it
+        v = "hello世界" :: EncodedParameterValue
+      in
+        meh (view (charsetDecoded defaultCharsets) v)
+          @?= Right (ParameterValue Nothing Nothing "hello世界")
+  ]
+  where
+    meh :: Either CharsetError b -> Either () b
+    meh = first (const ())
