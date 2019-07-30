@@ -6,6 +6,7 @@ import MIME
 import Headers
 import Generator
 import Parser
+import Message
 
 main :: IO ()
 main =
@@ -15,4 +16,5 @@ main =
     , Generator.properties
     , MIME.unittests
     , Parser.tests
+    , Message.tests
     ]

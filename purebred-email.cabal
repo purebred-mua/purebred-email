@@ -93,6 +93,7 @@ test-suite tests
     , MIME
     , Generator
     , Parser
+    , Message
   build-depends:
     base
     , bytestring

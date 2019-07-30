@@ -449,7 +449,7 @@ contentTypeApplicationOctetStream =
 -- | @multipart/mixed; boundary=asdf@
 contentTypeMultipartMixed :: B.ByteString -> ContentType
 contentTypeMultipartMixed boundary =
-  over parameterList (("boundary", boundary):)
+  set (parameter "boundary") (Just (ParameterValue Nothing Nothing boundary))
   $ ContentType "multipart" "mixed" (Parameters [])
 
 -- | Lens to the content-type header.  Probably not a lawful lens.
