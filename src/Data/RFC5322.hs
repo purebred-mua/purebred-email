@@ -60,6 +60,7 @@ module Data.RFC5322
   -- * Message types
     Message(..)
   , message
+  , MessageContext
   , headers
   , headerList
   , body
@@ -273,8 +274,11 @@ address = group <|> Single <$> mailbox
 -- This parser does not handle the legitimate but obscure case
 -- of a message with no body (empty body is fine, though).
 --
-message :: (Headers -> Parser a) -> Parser (Message s a)
+message :: (Headers -> Parser a) -> Parser (Message (MessageContext a) a)
 message f = fields >>= \hdrs -> Message hdrs <$> (crlf *> f hdrs)
+
+type family MessageContext a = s
+
 
 fields :: Parser Headers
 fields = Headers <$> many field

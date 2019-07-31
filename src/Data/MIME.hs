@@ -578,6 +578,8 @@ mime h
   | nullOf (header "MIME-Version") h = Part <$> takeByteString
   | otherwise = mime' takeByteString h
 
+type instance MessageContext MIME = EncStateWire
+
 mime'
   :: Parser B.ByteString
   -- ^ Parser FOR A TAKE to the part delimiter.  If this part is
