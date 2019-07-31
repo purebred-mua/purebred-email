@@ -52,6 +52,7 @@ instance AsTransferEncodingError TransferEncodingError where
       TransferDecodeError k -> Just k ; _ -> Nothing
 
 
+-- | Data types that can have /transfer encoding/.
 class HasTransferEncoding a where
   type TransferDecoded a
 
@@ -63,6 +64,10 @@ class HasTransferEncoding a where
 
   -- | Perform content transfer decoding.
   transferDecoded :: AsTransferEncodingError e => Getter a (Either e (TransferDecoded a))
+
+  -- | Perform content transfer decoding (monomorphic error type).
+  transferDecoded' :: Getter a (Either TransferEncodingError (TransferDecoded a))
+  transferDecoded' = transferDecoded
 
 -- | Decode the object according to the declared content transfer encoding.
 transferDecodedBytes

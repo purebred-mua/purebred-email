@@ -38,6 +38,7 @@ module Data.MIME
   , attachments
   , isAttachment
   , transferDecoded
+  , transferDecoded'
   , charsetDecoded
 
   -- ** Header processing
