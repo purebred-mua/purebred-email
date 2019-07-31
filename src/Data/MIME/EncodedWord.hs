@@ -42,6 +42,7 @@ instance HasTransferEncoding EncodedWord where
   transferEncodedData = to _encodedWordText
   transferDecoded = to $ \a@(EncodedWord charset lang _ _) ->
     TransferDecodedEncodedWord charset lang <$> view transferDecodedBytes a
+  transferEncode = transferEncodeEncodedWord
 
 
 data TransferDecodedEncodedWord = TransferDecodedEncodedWord

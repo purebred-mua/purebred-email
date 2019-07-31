@@ -17,11 +17,16 @@ module Data.MIME.TransferEncoding
   , TransferEncodingError(..)
   , AsTransferEncodingError(..)
   , TransferEncoding
+  , chooseTransferEncoding
   ) where
 
+import Data.Monoid (Sum(Sum), Any(Any))
+
 import Control.Lens
-  ( APrism', Getter, Prism', clonePrism, preview, prism', review, to, view )
+  ( APrism', Getter, Prism'
+  , clonePrism, foldMapOf, preview, prism', review, to, view )
 import qualified Data.ByteString as B
+import Data.ByteString.Lens (bytes)
 import qualified Data.CaseInsensitive as CI
 
 import Data.MIME.Base64
@@ -69,6 +74,9 @@ class HasTransferEncoding a where
   transferDecoded' :: Getter a (Either TransferEncodingError (TransferDecoded a))
   transferDecoded' = transferDecoded
 
+  -- | Encode the data
+  transferEncode :: TransferDecoded a -> a
+
 -- | Decode the object according to the declared content transfer encoding.
 transferDecodedBytes
   :: (HasTransferEncoding a, AsTransferEncodingError e)
@@ -97,6 +105,25 @@ transferEncodings =
   , ("q", q)
   , ("b", contentTransferEncodingBase64)
   ]
+
+-- | Inspect the data and choose a transfer encoding to use: @7bit@
+-- if the data can be transmitted as-is, otherwise whichever of
+-- @quoted-printable@ or @base64@ should result in smaller output.
+--
+chooseTransferEncoding :: B.ByteString -> (TransferEncodingName, TransferEncoding)
+chooseTransferEncoding s
+  -- TODO: does not handle max line length of 998
+  | not doEnc = ("7bit", id)
+  | nQP < nB64 = ("quoted-printable", contentTransferEncodingQuotedPrintable)
+  | otherwise = ("base64", contentTransferEncodingBase64)
+  where
+    -- https://tools.ietf.org/html/rfc5322#section-3.5 'text'
+    needEnc c = c > 127 || c == 0
+    qpBytes c
+      | encodingRequiredNonEOL QuotedPrintable c = 3
+      | otherwise = 1
+    (Any doEnc, Sum nQP) = foldMapOf bytes (\c -> (Any (needEnc c), Sum (qpBytes c))) s
+    nB64 = ((B.length s + 2) `div` 3) * 4
 
 transferEncodeData :: Encoding -> B.ByteString -> B.ByteString
 transferEncodeData Base64 = contentTransferEncodeBase64

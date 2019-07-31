@@ -271,6 +271,15 @@ instance HasTransferEncoding WireEntity where
   transferEncodedData = body
   transferDecoded = to $ \a -> (\t -> set body t a) <$> view transferDecodedBytes a
 
+  transferEncode (Message h s) =
+    let
+      (cteName, cte) = chooseTransferEncoding s
+      s' = review (clonePrism cte) s
+      cteName' = CI.original cteName
+      h' = set (headers . at "Content-Transfer-Encoding") (Just cteName') h
+    in
+      Message h' s'
+
 printContentTransferEncoding :: Encoding -> B.ByteString
 printContentTransferEncoding Base64 = "base64"
 printContentTransferEncoding None = "7bit"

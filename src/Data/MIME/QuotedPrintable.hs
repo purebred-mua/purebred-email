@@ -12,6 +12,9 @@ module Data.MIME.QuotedPrintable
   (
     contentTransferEncodingQuotedPrintable
   , q
+  , QuotedPrintableMode(..)
+  , encodingRequiredEOL
+  , encodingRequiredNonEOL
   ) where
 
 import Control.Lens (APrism', prism')
