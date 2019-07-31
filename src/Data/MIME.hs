@@ -468,8 +468,8 @@ contentTypeMultipartMixed boundary =
 -- otherwise it is added.  Unrecognised Content-Transfer-Encoding
 -- is ignored when setting.
 --
-contentType :: Lens' Headers ContentType
-contentType = lens sa sbt where
+contentType :: HasHeaders a => Lens' a ContentType
+contentType = headers . lens sa sbt where
   sa s = case view cte s of
     Nothing -> contentTypeApplicationOctetStream
     Just _ ->
@@ -532,7 +532,7 @@ printContentDisposition (ContentDisposition typ params) =
 --
 -- The fold may be empty, e.g. if the header is absent or unparseable.
 --
-contentDisposition :: Traversal' Headers ContentDisposition
+contentDisposition :: HasHeaders a => Traversal' a ContentDisposition
 contentDisposition =
   header "content-disposition"
   . parsePrint parseContentDisposition printContentDisposition
@@ -654,20 +654,20 @@ createMessage ct cd encoding content =
   . set (headers . at "Content-Disposition") (Just (printContentDisposition cd))
   . set (headers . at "Content-Transfer-Encoding") (Just (printContentTransferEncoding encoding))
 
-headerFrom :: Lens' Headers [Mailbox]
-headerFrom = lens getter setter
+headerFrom :: HasHeaders a => Lens' a [Mailbox]
+headerFrom = headers . lens getter setter
   where
     getter = either (pure []) id . parseOnly mailboxList . view (header "from")
     setter = flip $ set (header "from") . renderMailboxes
 
-headerTo :: Lens' Headers [Address]
-headerTo = lens (headerGetter "to") (headerSetter "to")
+headerTo :: HasHeaders a => Lens' a [Address]
+headerTo = headers . lens (headerGetter "to") (headerSetter "to")
 
-headerCC :: Lens' Headers [Address]
-headerCC = lens (headerGetter "cc") (headerSetter "cc")
+headerCC :: HasHeaders a => Lens' a [Address]
+headerCC = headers . lens (headerGetter "cc") (headerSetter "cc")
 
-headerBCC :: Lens' Headers [Address]
-headerBCC = lens (headerGetter "bcc") (headerSetter "bcc")
+headerBCC :: HasHeaders a => Lens' a [Address]
+headerBCC = headers . lens (headerGetter "bcc") (headerSetter "bcc")
 
 headerSetter :: CI B.ByteString -> Headers -> [Address] -> Headers
 headerSetter fieldname = flip $ set (header fieldname) . renderAddresses
@@ -676,8 +676,8 @@ headerGetter :: CI C8.ByteString -> Headers -> [Address]
 headerGetter fieldname =
     either (pure []) id . parseOnly addressList . view (header fieldname)
 
-headerDate :: Lens' Headers UTCTime
-headerDate = lens getter setter
+headerDate :: HasHeaders a => Lens' a UTCTime
+headerDate = headers . lens getter setter
   where
     -- TODO for parseTimeOrError. See #16
     getter =
@@ -694,8 +694,8 @@ headerDate = lens getter setter
 -- * Value from 'Message-ID' (in case it's the first reply to a parent mail)
 -- * otherwise Nothing is returned indicating that the replying mail should not have a 'References' field.
 --
-replyHeaderReferences :: Getter Headers (Maybe C8.ByteString)
-replyHeaderReferences = to $ \hdrs ->
+replyHeaderReferences :: HasHeaders a => Getter a (Maybe C8.ByteString)
+replyHeaderReferences = (.) headers $ to $ \hdrs ->
   let xs = catMaybes
         [preview (header "references") hdrs
          <|> preview (header "in-reply-to") hdrs

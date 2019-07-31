@@ -61,12 +61,16 @@ module Data.RFC5322
     Message(..)
   , message
   , MessageContext
-  , headers
-  , headerList
   , body
-  , Headers(..)
+
+  -- ** Headers
   , Header
+  , HasHeaders(..)
   , header
+  , headerList
+  , Headers(..)
+
+  -- ** Addresses
   , Address(..)
   , address
   , addressList
@@ -128,6 +132,12 @@ type Header = (CI B.ByteString, B.ByteString)
 newtype Headers = Headers [Header]
   deriving (Eq, Show, Generic, NFData)
 
+class HasHeaders a where
+  headers :: Lens' a Headers
+
+instance HasHeaders Headers where
+  headers = id
+
 type instance Index Headers = CI B.ByteString
 type instance IxValue Headers = B.ByteString
 
@@ -152,9 +162,9 @@ instance At Headers where
         g <$> f (lookup k kv)
 
 
--- | Get all values of the given header
-header :: CI B.ByteString -> Traversal' Headers B.ByteString
-header k = hdriso . traversed . filtered ((k ==) . fst) . _2
+-- | Target all values of the given header
+header :: HasHeaders a => CI B.ByteString -> Traversal' a B.ByteString
+header k = headerList . traversed . filtered ((k ==) . fst) . _2
 
 -- | Message type, parameterised over context and body type.  The
 -- context type is not used in this module but is provided for uses
@@ -164,12 +174,11 @@ header k = hdriso . traversed . filtered ((k ==) . fst) . _2
 data Message s a = Message Headers a
   deriving (Eq, Show, Generic, NFData)
 
-headers :: Lens' (Message s a) Headers
-headers f (Message h b) = fmap (\h' -> Message h' b) (f h)
-{-# ANN headers ("HLint: ignore Avoid lambda" :: String) #-}
+instance HasHeaders (Message s a) where
+  headers f (Message h b) = fmap (`Message` b) (f h)
 
 -- | Access headers as a list of key/value pairs.
-headerList :: Lens' (Message s a) [(CI B.ByteString, B.ByteString)]
+headerList :: HasHeaders a => Lens' a [(CI B.ByteString, B.ByteString)]
 headerList = headers . coerced
 
 body :: Lens (Message ctx a) (Message ctx' b) a b
