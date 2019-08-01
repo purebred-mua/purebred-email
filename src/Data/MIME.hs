@@ -644,8 +644,8 @@ buildMessage (Message h (Multipart xs)) =
     in buildFields h <> ents <> boundary <> "--\r\n"
 
 
-mimeHeader :: (CI B.ByteString, B.ByteString)
-mimeHeader = (CI.mk "MIME-Version", "1.0")
+mimeHeader :: Header
+mimeHeader = ("MIME-Version", "1.0")
 
 -- | creates a new `MIMEMessage` and transfer encodes the given content with the
 -- given Encoding
