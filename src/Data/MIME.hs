@@ -403,7 +403,7 @@ instance HasCharset ByteEntity where
     let
       b = T.encodeUtf8 a
       charset = if B.all (< 0x80) b then "us-ascii" else "utf-8"
-    in Message (set (contentType . rawParameter "charset") charset h) b
+    in Message (set (contentType . parameter "charset") (Just charset) h) b
 
 -- | RFC 6657 provides for different media types having different
 -- ways to determine the charset.  This data type defines how a
