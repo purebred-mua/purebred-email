@@ -177,6 +177,9 @@ data Message s a = Message Headers a
 instance HasHeaders (Message s a) where
   headers f (Message h b) = fmap (`Message` b) (f h)
 
+instance Functor (Message s) where
+  fmap f (Message h a) = Message h (f a)
+
 -- | Access headers as a list of key/value pairs.
 headerList :: HasHeaders a => Lens' a [(CI B.ByteString, B.ByteString)]
 headerList = headers . coerced
