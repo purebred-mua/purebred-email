@@ -743,15 +743,14 @@ createMultipartMixedMessage b attachments' =
 
 -- | Create an inline, text/plain, utf-8 encoded message
 --
-createTextPlainMessage
-    :: T.Text -- ^ message body
-    -> MIMEMessage
-createTextPlainMessage =
-    createMessage
-        contentTypeTextPlain
-        (ContentDisposition Inline $ Parameters [(CI.mk "charset", "utf-8")])
-        None
-    . T.encodeUtf8
+createTextPlainMessage :: T.Text -> MIMEMessage
+createTextPlainMessage s = fmap Part $ transferEncode $ charsetEncode msg
+  where
+  msg = Message hdrs s :: TextEntity
+  -- cd = ContentDisposition Inline (Parameters [])
+  hdrs = Headers [mimeHeader]
+          & set contentType contentTypeTextPlain
+          -- & set contentDisposition (Just cd)  TODO set content disp
 
 -- | Create an attachment from a given file path.
 -- Note: The filename content disposition is set to the given `FilePath`. For
