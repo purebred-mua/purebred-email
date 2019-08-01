@@ -240,6 +240,13 @@ data MIME
   | Multipart [MIMEMessage]
   deriving (Eq, Show)
 
+-- | Ignores the presence/absense of @MIME-Version@ header
+instance EqMessage MIME where
+  Message h1 b1 `eqMessage` Message h2 b2 =
+    stripVer h1 == stripVer h2 && b1 == b2
+    where
+    stripVer = set (headers . at "MIME-Version") Nothing
+
 -- | Get all leaf entities from the MIME message
 --
 entities :: Traversal' MIMEMessage WireEntity
@@ -624,24 +631,30 @@ multipart takeTillEnd boundary =
       *> part `sepBy` crlf
       <* string "--" <* takeTillEnd
 
--- | Serialise a given `MIMEMessage` into a ByteString. The message is
--- serialised as is. No additional headers are set.
+-- | Serialise a given `MIMEMessage` into a ByteString.
+--
+-- Sets the @MIME-Version: 1.0@ header (on the top-level message only).
+-- No other headers are set.
+--
 renderMessage :: MIMEMessage -> B.ByteString
 renderMessage = toStrict . Builder.toLazyByteString . buildMessage
 
 -- | Serialise a given `MIMEMessage` using a `Builder`
+--
+-- Sets the @MIME-Version: 1.0@ header (on the top-level message only).
+-- No other headers are set.
+--
 buildMessage :: MIMEMessage -> Builder.Builder
-buildMessage (Message h (Part partbody)) =
+buildMessage = go . set (headers . at "MIME-Version") (Just "1.0")
+  where
+  go (Message h (Part partbody)) =
     buildFields h <> "\r\n" <> Builder.byteString partbody
-buildMessage (Message h (Multipart xs)) =
+  go (Message h (Multipart xs)) =
     let b = firstOf (contentType . mimeBoundary) h
         boundary = maybe mempty (\b' -> "\r\n--" <> Builder.byteString b') b
-        ents = foldMap (\part -> boundary <> "\r\n" <> buildMessage part) xs
+        ents = foldMap (\part -> boundary <> "\r\n" <> go part) xs
     in buildFields h <> ents <> boundary <> "--\r\n"
 
-
-mimeHeader :: Header
-mimeHeader = ("MIME-Version", "1.0")
 
 headerFrom :: HasHeaders a => Lens' a [Mailbox]
 headerFrom = headers . lens getter setter
@@ -712,14 +725,11 @@ replyHeaderReferences = (.) headers $ to $ \hdrs ->
 -- @
 createMultipartMixedMessage
     :: B.ByteString -- ^ Boundary
-    -> [MIMEMessage] -- ^ attachments
+    -> [MIMEMessage] -- ^ parts
     -> MIMEMessage
 createMultipartMixedMessage b attachments' =
-    let hdrs =
-            set
-                (at "Content-Type")
-                (Just $ printContentType (contentTypeMultipartMixed b)) $
-            Headers [mimeHeader]
+    let hdrs = Headers [] &
+                set contentType (contentTypeMultipartMixed b)
     in Message hdrs (Multipart attachments')
 
 -- | Create an inline, text/plain, utf-8 encoded message
@@ -729,7 +739,7 @@ createTextPlainMessage s = fmap Part $ transferEncode $ charsetEncode msg
   where
   msg = Message hdrs s :: TextEntity
   cd = ContentDisposition Inline (Parameters [])
-  hdrs = Headers [mimeHeader]
+  hdrs = Headers []
           & set contentType contentTypeTextPlain
           & set contentDisposition (Just cd)
 
@@ -749,6 +759,6 @@ createAttachment ct fp s = fmap Part $ transferEncode msg
   msg = Message hdrs s
   cd = ContentDisposition Attachment cdParams
   cdParams = Parameters [] & set filenameParameter (newParameter <$> fp)
-  hdrs = Headers [mimeHeader]
+  hdrs = Headers []
           & set contentType ct
           & set contentDisposition (Just cd)

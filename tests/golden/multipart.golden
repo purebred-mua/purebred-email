@@ -1,22 +1,20 @@
+MIME-Version: 1.0
 From: "Roman Joost" <foo@bar.com>
 To: bar@bar.com
 Date: Sun, 20 Mar 1859 00:02:03 +0000
 Subject: Hello there
 Content-Type: multipart/mixed; boundary=asdf
-MIME-Version: 1.0
 
 --asdf
 Content-Transfer-Encoding: 7bit
 Content-Disposition: inline
 Content-Type: text/plain; charset=us-ascii
-MIME-Version: 1.0
 
 This is a simple mail.
 --asdf
 Content-Transfer-Encoding: 7bit
 Content-Disposition: attachment; filename=foo.bin
 Content-Type: application/octet-stream
-MIME-Version: 1.0
 
 fileContentsASDF
 --asdf--

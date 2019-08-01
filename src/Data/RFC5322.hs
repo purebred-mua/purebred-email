@@ -62,6 +62,7 @@ module Data.RFC5322
   , message
   , MessageContext
   , body
+  , EqMessage(..)
 
   -- ** Headers
   , Header
@@ -172,13 +173,25 @@ header k = headerList . traversed . filtered ((k ==) . fst) . _2
 -- messages.
 --
 data Message s a = Message Headers a
-  deriving (Eq, Show, Generic, NFData)
+  deriving (Show, Generic, NFData)
 
 instance HasHeaders (Message s a) where
   headers f (Message h b) = fmap (`Message` b) (f h)
 
 instance Functor (Message s) where
   fmap f (Message h a) = Message h (f a)
+
+-- | How to compare messages with this body type.
+--
+-- This class arises because we may want to tweak the headers,
+-- possibly in response to body data, or vice-versa, when
+-- comparing messages.
+--
+class EqMessage a where
+  eqMessage :: Message s a -> Message s a -> Bool
+
+instance EqMessage a => Eq (Message s a) where
+  (==) = eqMessage
 
 -- | Access headers as a list of key/value pairs.
 headerList :: HasHeaders a => Lens' a [(CI B.ByteString, B.ByteString)]
