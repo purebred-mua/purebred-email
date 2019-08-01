@@ -7,16 +7,16 @@ MIME-Version: 1.0
 
 --asdf
 Content-Transfer-Encoding: 7bit
+Content-Disposition: inline
 Content-Type: text/plain; charset=us-ascii
 MIME-Version: 1.0
 
 This is a simple mail.
 --asdf
-Content-Type: application/octet-stream
+Content-Transfer-Encoding: 7bit
 Content-Disposition: attachment; filename=foo.bin
-Content-Transfer-Encoding: base64
+Content-Type: application/octet-stream
 MIME-Version: 1.0
 
-ZmlsZUNvbnRlbnRzQVNERg==
-
+fileContentsASDF
 --asdf--

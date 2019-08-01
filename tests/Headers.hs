@@ -257,11 +257,12 @@ parameterTests = testGroup "parameter handling"
         (Headers [("Content-Type", "application/x-stuff; title*0*=us-ascii'en'This%20is%20even%20more%20; title*1*=%2A%2A%2Afun%2A%2A%2A%20; title*2=\"isn't it!\"")])
       @?= Just (ParameterValue (Just "us-ascii") (Just "en") "This is even more ***fun*** isn't it!")
   , testCase "set filename parameter in Content-Disposition" $
-      set (contentDisposition . parameter "filename") (Just (ParameterValue Nothing Nothing "foo.pdf"))
+      set (contentDisposition . traversed . parameter "filename")
+        (Just (ParameterValue Nothing Nothing "foo.pdf"))
         (Headers [("Content-Disposition", "attachment")])
       @?= Headers [("Content-Disposition", "attachment; filename=foo.pdf")]
   , testCase "unset filename parameter in Content-Disposition" $
-      set (contentDisposition . parameter "filename") Nothing
+      set (contentDisposition . traversed . parameter "filename") Nothing
         (Headers [("Content-Disposition", "attachment; foo=bar; filename=foo.pdf")])
       @?= Headers [("Content-Disposition", "attachment; foo=bar")]
   ]

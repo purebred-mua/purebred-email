@@ -119,7 +119,6 @@ import Data.MIME.Charset
 import Data.MIME.EncodedWord
 import Data.MIME.Parameter
 import Data.MIME.TransferEncoding
-import Data.MIME.Types (Encoding(..))
 
 {- $overview
 
@@ -252,12 +251,11 @@ entities f (Message h a) = case a of
 
 -- | Leaf entities with @Content-Disposition: attachment@
 attachments :: Traversal' MIMEMessage WireEntity
-attachments = entities . filtered (notNullOf l) where
-  l = headers . contentDisposition . dispositionType . filtered (== Attachment)
+attachments = entities . filtered (isAttachment)
 
 -- | MIMEMessage content disposition is an 'Attachment'
-isAttachment :: MIMEMessage -> Bool
-isAttachment = has (headers . contentDisposition . dispositionType . filtered (== Attachment))
+isAttachment :: HasHeaders a => a -> Bool
+isAttachment = has (contentDisposition . _Just . dispositionType . filtered (== Attachment))
 
 contentTransferEncoding :: Getter Headers TransferEncodingName
 contentTransferEncoding = to $
@@ -278,10 +276,6 @@ instance HasTransferEncoding WireEntity where
       h' = set (headers . at "Content-Transfer-Encoding") (Just cteName') h
     in
       Message h' s'
-
-printContentTransferEncoding :: Encoding -> B.ByteString
-printContentTransferEncoding Base64 = "base64"
-printContentTransferEncoding None = "7bit"
 
 caseInsensitive :: CI.FoldCase s => Iso' s (CI s)
 caseInsensitive = iso CI.mk CI.original
@@ -533,17 +527,19 @@ printContentDisposition (ContentDisposition typ params) =
   where
     typStr = case typ of Inline -> "inline" ; Attachment -> "attachment"
 
--- | Get Content-Disposition header.
+-- | Access @Content-Disposition@ header.
+--
 -- Unrecognised disposition types are coerced to @Attachment@
 -- in accordance with RFC 2183 §2.8 which states:
--- /Unrecognized disposition types should be treated as/ attachment.
+-- /Unrecognized disposition types should be treated as attachment/.
 --
--- The fold may be empty, e.g. if the header is absent or unparseable.
+-- This optic does not distinguish between missing header or malformed
+-- value.
 --
-contentDisposition :: HasHeaders a => Traversal' a ContentDisposition
-contentDisposition =
-  header "content-disposition"
-  . parsePrint parseContentDisposition printContentDisposition
+contentDisposition :: HasHeaders a => Lens' a (Maybe ContentDisposition)
+contentDisposition = headers . at "Content-Disposition" . dimap
+  (>>= either (const Nothing) Just . Data.RFC5322.parse parseContentDisposition)
+  (fmap . fmap $ printContentDisposition)
 
 -- | Traverse the value of the filename parameter (if present).
 --
@@ -647,21 +643,6 @@ buildMessage (Message h (Multipart xs)) =
 mimeHeader :: Header
 mimeHeader = ("MIME-Version", "1.0")
 
--- | creates a new `MIMEMessage` and transfer encodes the given content with the
--- given Encoding
-createMessage
-    :: ContentType
-    -> ContentDisposition
-    -> Encoding
-    -> B.ByteString -- ^ content
-    -> MIMEMessage
-createMessage ct cd encoding content =
-  let m = Message (Headers [mimeHeader]) (Part $ transferEncodeData encoding content)
-  in m
-  & set (headers . at "Content-Type") (Just (printContentType ct))
-  . set (headers . at "Content-Disposition") (Just (printContentDisposition cd))
-  . set (headers . at "Content-Transfer-Encoding") (Just (printContentTransferEncoding encoding))
-
 headerFrom :: HasHeaders a => Lens' a [Mailbox]
 headerFrom = headers . lens getter setter
   where
@@ -747,10 +728,10 @@ createTextPlainMessage :: T.Text -> MIMEMessage
 createTextPlainMessage s = fmap Part $ transferEncode $ charsetEncode msg
   where
   msg = Message hdrs s :: TextEntity
-  -- cd = ContentDisposition Inline (Parameters [])
+  cd = ContentDisposition Inline (Parameters [])
   hdrs = Headers [mimeHeader]
           & set contentType contentTypeTextPlain
-          -- & set contentDisposition (Just cd)  TODO set content disp
+          & set contentDisposition (Just cd)
 
 -- | Create an attachment from a given file path.
 -- Note: The filename content disposition is set to the given `FilePath`. For
@@ -759,12 +740,15 @@ createTextPlainMessage s = fmap Part $ transferEncode $ charsetEncode msg
 createAttachmentFromFile :: ContentType -> FilePath -> IO MIMEMessage
 createAttachmentFromFile ct fp = createAttachment ct (Just fp) <$> B.readFile fp
 
--- | Create an attachment from the given file contents. Optionally set the given
+-- | Create an attachment from the given file contents. Optionally set the
 -- filename parameter to the given file path.
 --
 createAttachment :: ContentType -> Maybe FilePath -> B.ByteString -> MIMEMessage
-createAttachment ct fp =
-    set
-        (headers . contentDisposition . filenameParameter)
-        (newParameter . T.pack <$> fp) .
-    createMessage ct (ContentDisposition Attachment $ Parameters []) Base64
+createAttachment ct fp s = fmap Part $ transferEncode msg
+  where
+  msg = Message hdrs s
+  cd = ContentDisposition Attachment cdParams
+  cdParams = Parameters [] & set filenameParameter (newParameter <$> fp)
+  hdrs = Headers [mimeHeader]
+          & set contentType ct
+          & set contentDisposition (Just cd)
