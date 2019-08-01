@@ -94,7 +94,6 @@ module Data.MIME
   ) where
 
 import Control.Applicative
-import Control.Monad (void)
 import Data.Maybe (fromMaybe, catMaybes)
 import Data.Semigroup ((<>))
 import GHC.Generics (Generic)
