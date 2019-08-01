@@ -1,6 +1,7 @@
 {-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE DeriveAnyClass #-}
+{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RankNTypes #-}
@@ -48,6 +49,7 @@ import System.IO.Unsafe (unsafeDupablePerformIO)
 
 import Control.DeepSeq (NFData)
 import Control.Lens
+import Control.Lens.Cons.Extras (recons)
 import Data.Attoparsec.ByteString.Char8 hiding (take)
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Internal as B
@@ -192,8 +194,8 @@ charset f (ParameterValue a b c) = (\a' -> ParameterValue a' b c) <$> f a
 -- If you need to to specify language, use the 'ParameterValue'
 -- constructor directly.
 --
-newParameter :: T.Text -> EncodedParameterValue
-newParameter = charsetEncode . ParameterValue Nothing Nothing
+newParameter :: Cons s s Char Char => s -> EncodedParameterValue
+newParameter = charsetEncode . ParameterValue Nothing Nothing . view recons
 
 
 -- | The default charset @us-ascii@ is implied by the abstract of
