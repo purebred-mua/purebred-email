@@ -449,18 +449,18 @@ defaultContentType =
 
 -- | @text/plain@
 contentTypeTextPlain :: ContentType
-contentTypeTextPlain = ContentType "text" "plain" (Parameters [])
+contentTypeTextPlain = ContentType "text" "plain" mempty
 
 -- | @application/octet-stream@
 contentTypeApplicationOctetStream :: ContentType
 contentTypeApplicationOctetStream =
-  ContentType "application" "octet-stream" (Parameters [])
+  ContentType "application" "octet-stream" mempty
 
 -- | @multipart/mixed; boundary=asdf@
 contentTypeMultipartMixed :: B.ByteString -> ContentType
 contentTypeMultipartMixed boundary =
   set (parameter "boundary") (Just (ParameterValue Nothing Nothing boundary))
-  $ ContentType "multipart" "mixed" (Parameters [])
+  $ ContentType "multipart" "mixed" mempty
 
 -- | Lens to the content-type header.  Probably not a lawful lens.
 --
@@ -728,7 +728,7 @@ createMultipartMixedMessage
     -> [MIMEMessage] -- ^ parts
     -> MIMEMessage
 createMultipartMixedMessage b attachments' =
-    let hdrs = Headers [] &
+    let hdrs = mempty &
                 set contentType (contentTypeMultipartMixed b)
     in Message hdrs (Multipart attachments')
 
@@ -738,8 +738,8 @@ createTextPlainMessage :: T.Text -> MIMEMessage
 createTextPlainMessage s = fmap Part $ transferEncode $ charsetEncode msg
   where
   msg = Message hdrs s :: TextEntity
-  cd = ContentDisposition Inline (Parameters [])
-  hdrs = Headers []
+  cd = ContentDisposition Inline mempty
+  hdrs = mempty
           & set contentType contentTypeTextPlain
           & set contentDisposition (Just cd)
 
@@ -758,7 +758,7 @@ createAttachment ct fp s = fmap Part $ transferEncode msg
   where
   msg = Message hdrs s
   cd = ContentDisposition Attachment cdParams
-  cdParams = Parameters [] & set filenameParameter (newParameter <$> fp)
-  hdrs = Headers []
+  cdParams = mempty & set filenameParameter (newParameter <$> fp)
+  hdrs = mempty
           & set contentType ct
           & set contentDisposition (Just cd)

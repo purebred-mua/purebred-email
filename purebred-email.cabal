@@ -65,7 +65,7 @@ library
     Data.MIME.Internal
   -- other-extensions:    
   build-depends:
-    base >= 4.8 && < 5
+    base >= 4.11 && < 5
     , attoparsec >= 0.13 && < 0.14
     , base64-bytestring >= 1 && < 2
     , bytestring >= 0.10 && < 0.11

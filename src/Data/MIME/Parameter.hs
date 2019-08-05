@@ -70,6 +70,12 @@ type RawParameters = [(CI B.ByteString, B.ByteString)]
 newtype Parameters = Parameters [(CI B.ByteString, B.ByteString)]
   deriving (Eq, Show, Generic, NFData)
 
+instance Semigroup Parameters where
+  Parameters a <> Parameters b = Parameters (a <> b)
+
+instance Monoid Parameters where
+  mempty = Parameters []
+
 type instance Index Parameters = CI B.ByteString
 type instance IxValue Parameters = EncodedParameterValue
 
