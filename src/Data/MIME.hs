@@ -96,6 +96,7 @@ module Data.MIME
 import Control.Applicative
 import Data.Maybe (fromMaybe, catMaybes)
 import Data.Semigroup ((<>))
+import Data.String (IsString(fromString))
 import GHC.Generics (Generic)
 
 import Control.DeepSeq (NFData)
@@ -294,8 +295,11 @@ caseInsensitive = iso CI.mk CI.original
 -- Example:
 --
 -- @
--- ContentType "text" "plain" [("charset", "utf-8")]
+-- ContentType "text" "plain" (Parameters [("charset", "utf-8")])
 -- @
+--
+-- You can also use @-XOverloadedStrings@ but be aware the conversion
+-- is non-total (throws an error if it cannot parse the string).
 --
 data ContentType = ContentType (CI B.ByteString) (CI B.ByteString) Parameters
   deriving (Show, Generic, NFData)
@@ -307,6 +311,14 @@ data ContentType = ContentType (CI B.ByteString) (CI B.ByteString) Parameters
 --
 instance Eq ContentType where
   ContentType a b c == ContentType a' b' c' = a == a' && b == b' && c == c'
+
+-- | __NON-TOTAL__ parses the Content-Type (including parameters)
+-- and throws an error if the parse fails
+--
+instance IsString ContentType where
+  fromString = either err id . parseOnly parseContentType . C8.pack
+    where
+    err msg = error $ "failed to parse Content-Type: " <> msg
 
 -- | Match content type.  If @Nothing@ is given for subtype, any
 -- subtype is accepted.

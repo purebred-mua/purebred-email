@@ -19,16 +19,19 @@
 
 module MIME where
 
+import Control.Exception (ErrorCall, evaluate, try)
 import Control.Monad ((<=<), void)
 import Data.Bifunctor (first)
 import Data.Char (toUpper)
+import Data.Either (isLeft)
+import Data.String (fromString)
 
 import Control.Lens
 import qualified Data.ByteString as B
 import qualified Data.Text as T
 
 import Test.Tasty (TestTree, testGroup)
-import Test.Tasty.HUnit ((@?=), Assertion, assertFailure, testCase)
+import Test.Tasty.HUnit ((@?=), Assertion, assertBool, assertFailure, testCase)
 import Test.Tasty.QuickCheck
 import Test.QuickCheck.Instances ()
 
@@ -40,6 +43,7 @@ unittests = testGroup "MIME tests"
   [ testContentDisposition
   , testParse
   , testParameterValueOverloadedStrings
+  , testContentTypeOverloadedStrings
   ]
 
 testContentDisposition :: TestTree
@@ -177,3 +181,12 @@ testParameterValueOverloadedStrings = testGroup "ParameterValue IsString instanc
   where
     meh :: Either CharsetError b -> Either () b
     meh = first (const ())
+
+testContentTypeOverloadedStrings :: TestTree
+testContentTypeOverloadedStrings = testGroup "ContentType fromString"
+  [ testCase "no params" $ fromString "foo/bar" @?= ContentType "foo" "bar" mempty
+  , testCase "params" $ fromString "foo/bar; baz=quux" @?= ContentType "foo" "bar" (Parameters [("baz", "quux")])
+  , testCase "bogus" $
+      (isLeft <$> (try . evaluate $ fromString "foo/; baz=quux" :: IO (Either ErrorCall ContentType)))
+      >>= assertBool "bogus string throws error"
+  ]
