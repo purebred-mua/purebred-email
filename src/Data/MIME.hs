@@ -265,7 +265,8 @@ attachments = entities . filtered (isAttachment)
 isAttachment :: HasHeaders a => a -> Bool
 isAttachment = has (contentDisposition . _Just . dispositionType . filtered (== Attachment))
 
-contentTransferEncoding :: Getter Headers TransferEncodingName
+contentTransferEncoding
+  :: (Profunctor p, Contravariant f) => Optic' p f Headers TransferEncodingName
 contentTransferEncoding = to $
   fromMaybe "7bit"
   . preview (header "content-transfer-encoding" . caseInsensitive)

@@ -31,7 +31,7 @@ module Data.MIME.Charset
   , decodeLenient
   ) where
 
-import Control.Lens (Getter, Prism', prism', review, to, view)
+import Control.Lens
 import qualified Data.ByteString as B
 import qualified Data.CaseInsensitive as CI
 import qualified Data.Text as T
@@ -80,7 +80,11 @@ class HasCharset a where
   charsetData :: Getter a B.ByteString
 
   -- | Structure with the encoded data replaced with 'Text'
-  charsetDecoded :: AsCharsetError e => CharsetLookup -> Getter a (Either e (Decoded a))
+  charsetDecoded
+    :: AsCharsetError e
+    => CharsetLookup
+    -> ( forall p f. (Profunctor p, Contravariant f)
+        => Optic' p f a (Either e (Decoded a)) )
 
   -- | Encode the data
   charsetEncode :: Decoded a -> a
@@ -88,8 +92,8 @@ class HasCharset a where
 
 -- | Decode the object according to the declared charset.
 charsetText
-  :: (HasCharset a, AsCharsetError e)
-  => CharsetLookup -> Getter a (Either e T.Text)
+  :: (HasCharset a, AsCharsetError e, Profunctor p, Contravariant f)
+  => CharsetLookup -> Optic' p f a (Either e T.Text)
 charsetText lookupCharset = to $ \a ->
   maybe (Left $ review _CharsetUnspecified ()) Right (view charsetName a)
   >>= \k -> maybe (Left $ review _CharsetUnsupported k) Right (lookupCharset k)
@@ -97,17 +101,17 @@ charsetText lookupCharset = to $ \a ->
 
 -- | Monomorphic in error type
 charsetText'
-  :: (HasCharset a)
+  :: (HasCharset a, Profunctor p, Contravariant f)
   => CharsetLookup
-  -> Getter a (Either CharsetError T.Text)
+  -> Optic' p f a (Either CharsetError T.Text)
 charsetText' = charsetText
 
 -- | Prism for charset decoded/encoded data.
 -- Information about decoding failures is discarded.
 charsetPrism :: forall a. (HasCharset a) => CharsetLookup -> Prism' a (Decoded a)
-charsetPrism m = prism' charsetEncode (either (const Nothing) Just . view l)
+charsetPrism m = prism' charsetEncode (either err Just . view (charsetDecoded m))
   where
-  l = charsetDecoded m :: Getter a (Either CharsetError (Decoded a))
+  err = const Nothing :: CharsetError -> Maybe x
 
 charsets :: [(CI.CI B.ByteString, Charset)]
 charsets =

@@ -22,8 +22,6 @@ module Data.MIME.TransferEncoding
 import Data.Monoid (Sum(Sum), Any(Any))
 
 import Control.Lens
-  ( APrism', Getter, Prism'
-  , clonePrism, foldMapOf, preview, prism', review, to, view )
 import qualified Data.ByteString as B
 import Data.ByteString.Lens (bytes)
 import qualified Data.CaseInsensitive as CI
@@ -66,10 +64,14 @@ class HasTransferEncoding a where
   transferEncodedData :: Getter a B.ByteString
 
   -- | Perform content transfer decoding.
-  transferDecoded :: AsTransferEncodingError e => Getter a (Either e (TransferDecoded a))
+  transferDecoded
+    :: (AsTransferEncodingError e, Profunctor p, Contravariant f)
+    => Optic' p f a (Either e (TransferDecoded a))
 
   -- | Perform content transfer decoding (monomorphic error type).
-  transferDecoded' :: Getter a (Either TransferEncodingError (TransferDecoded a))
+  transferDecoded'
+    :: (Profunctor p, Contravariant f)
+    => Optic' p f a (Either TransferEncodingError (TransferDecoded a))
   transferDecoded' = transferDecoded
 
   -- | Encode the data
@@ -77,8 +79,8 @@ class HasTransferEncoding a where
 
 -- | Decode the object according to the declared content transfer encoding.
 transferDecodedBytes
-  :: (HasTransferEncoding a, AsTransferEncodingError e)
-  => Getter a (Either e B.ByteString)
+  :: (HasTransferEncoding a, AsTransferEncodingError e, Profunctor p, Contravariant f)
+  => Optic' p f a (Either e B.ByteString)
 transferDecodedBytes = to $ \a -> do
   let encName = view transferEncodingName a
   enc <- maybe (Left $ review _TransferEncodingUnsupported encName) Right
