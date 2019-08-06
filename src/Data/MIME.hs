@@ -9,16 +9,27 @@
 
 {- |
 
-MIME messages (RFC 2045, RFC 2046 and friends).
+MIME messages (RFC 2045, RFC 2046, RFC 2183 and friends).
+
+This module extends "Data.RFC5322" with types for handling MIME
+messages.  It provides the 'mime' parsing helper function for
+use with 'message'.
 
 -}
 module Data.MIME
   (
-  -- * Overview
-  -- $overview
+  -- * Overview / HOWTO
+  -- ** Creating and serialising mail
+  -- $create
 
-  -- * Examples / HOWTO
-  -- $examples
+  -- ** Parsing mail
+  -- $parse
+
+  -- ** Inspecting messages
+  -- $inspect
+
+  -- ** Unicode support
+  -- $unicode
 
   -- * API
 
@@ -121,100 +132,185 @@ import Data.MIME.EncodedWord
 import Data.MIME.Parameter
 import Data.MIME.TransferEncoding
 
-{- $overview
-
-This module extends 'Data.RFC5322' with types for handling MIME
-messages.  It provides the 'mime' parsing helper function for
-use with 'message'.
-
-@
-'mime' :: Headers -> Parser MIME
-message mime :: Parser (Message ctx MIME)
-@
-
-The 'Message' data type has a phantom type parameter for context.
-In this module we use it to track whether the body has
-/content transfer encoding/ or /charset encoding/ applied.  Type
-aliases are provided for convenince.
-
-@
-data 'Message' ctx a = Message Headers a
-data 'EncStateWire'
-data 'EncStateByte'
-
-type 'MIMEMessage' = Message EncStateWire MIME
-type 'WireEntity' = Message EncStateWire B.ByteString
-type 'ByteEntity' = Message EncStateByte B.ByteString
-type 'TextEntity' = Message () T.Text
-@
-
-Folds are provided over all leaf /entities/, and entities that are
-identified as attachments:
-
-@
-'entities' :: Fold MIMEMessage WireEntity
-'attachments' :: Fold MIMEMessage WireEntity
-@
-
-Content transfer decoding is performed using the 'transferDecoded'
-optic.  This will convert /Quoted-Printable/ or /Base64/ encoded
-entities into their decoded form.
-
-@
-'transferDecoded' :: Getter WireEntity (Either 'TransferEncodingError' ByteEntity)
-transferDecoded :: Getter WireEntity (Either 'EncodingError' ByteEntity)
-transferDecoded :: (HasTransferEncoding a, AsTransferEncodingError e) => Getter a (Either e (TransferDecoded a))
-@
-
-Charset decoding is performed using the 'charsetDecoded' optic:
-
-@
-'charsetDecoded' :: Getter ByteEntity (Either 'CharsetError' TextEntity)
-charsetDecoded :: Getter ByteEntity (Either 'EncodingError' TextEntity)
-charsetDecoded :: (HasCharset a, AsCharsetError e) => Getter a (Either e (Decoded a))
-@
-
--}
-
-{- $examples
-
-__Parse__ a MIME message:
-
-@
-'parse' (message mime) :: ByteString -> Either String MIMEMessage
-@
-
-Find the first entity with the @text/plain@ __content type__:
-
-@
-getTextPlain :: 'MIMEMessage' -> Maybe 'WireEntity'
-getTextPlain = firstOf ('entities' . filtered f)
-  where
-  f = 'matchContentType' "text" (Just "plain") . view ('headers' . 'contentType')
-@
-
-Perform __content transfer decoding__ /and/ __charset__ decoding
-while preserving decode errors:
-
-@
-view 'transferDecoded' >=> view 'charsetDecoded' :: WireEntity -> Either EncodingError TextEntity
-@
-
-Get all __attachments__ (transfer decoded) and their __filenames__ (if specified):
-
-@
-getAttachments :: 'MIMEMessage' -> [(Either 'TransferEncodingError' B.ByteString, Maybe T.Text)]
-getAttachments = toListOf ('attachments' . to (liftA2 (,) content name)
-  where
-  content = view 'transferDecodedBytes'
-  name = preview ('headers' . 'contentDisposition' . 'filename')
-@
+{- $create
 
 Create an inline, plain text message and render it:
 
 @
-renderMessage $ createTextPlainMessage "This is a test body"
+λ> import Data.MIME
+λ> msg = 'createTextPlainMessage' "Hello, world!"
+λ> s = 'renderMessage' msg
+λ> B.putStrLn s
+MIME-Version: 1.0
+Content-Transfer-Encoding: 7bit
+Content-Type: text/plain; charset=us-ascii
+Content-Disposition: inline
+
+Hello, world!
 @
+
+__TODO__ show how to set From,To,Cc,etc.
+
+Create a multipart message with attachment:
+
+@
+λ> attachment = 'createAttachment' "application/json" (Just "data.json") "{\"foo\":42}"
+λ> msg2 = 'createMultipartMixedMessage' "boundary" [msg, attachment]
+λ> s2 = 'renderMessage' msg2
+λ> B.putStrLn s2
+MIME-Version: 1.0
+Content-Type: multipart/mixed; boundary=boundary
+
+--boundary
+Content-Transfer-Encoding: 7bit
+Content-Disposition: inline
+Content-Type: text/plain; charset=us-ascii
+
+Hello, world!
+--boundary
+Content-Transfer-Encoding: 7bit
+Content-Disposition: attachment; filename=data.json
+Content-Type: application/json
+
+{"foo":42}
+--boundary--
+
+@
+
+-}
+
+{- $parse
+
+99% of the time, you will parse a message like this:
+
+@
+λ> parsedMessage = 'parse' ('message' 'mime') s2
+λ> :t parsedMessage
+parsedMessage :: Either String 'MIMEMessage'
+λ> parsedMessage == Right msg2
+True
+@
+
+The 'message' function builds a parser for a message.  It is
+abstracted over the body type; the argument is a function that can
+inspect headers and return a parser for the body.  If you are
+parsing MIME messages (or plain RFC 5322 messages), the 'mime'
+function is the right one to use.
+
+-}
+
+{- $inspect
+
+Parsing an email is nice, but your normally want to get at the
+content inside.  One of the most important tasks is finding entities
+of interest, e.g. attachments, plain text or HTML bodies.  The
+'entities' optic is a fold over all /leaf/ entities in the message.
+That is, all the non-multipart bodies.  You can use 'filtered' to
+refine the query.
+
+For example, let's say you want to find the first @text/plain@
+entity in a message.  Define a predicate with the help of the
+'matchContentType' function:
+
+@
+λ> isTextPlain = 'matchContentType' "text" (Just "plain") . view 'contentType'
+λ> :t isTextPlain
+isTextPlain :: HasHeaders s => s -> Bool
+λ> isTextPlain msg
+True
+λ> isTextPlain msg2
+False
+@
+
+Now we can use the predicate to construct a fold and retrieve the
+body.  If there is no matching entity the result would be @Nothing@.
+
+@
+λ> firstOf ('entities' . filtered isTextPlain . 'body') msg2
+Just "Hello, world!"
+@
+
+For __attachments__ you are normally interested in the binary data
+and possibly the filename (if specified).  In the following example we retrieve all attachments, and their filenames, as a list of tuples (although there is only one in the message).  Note that
+
+Get the (optional) filenames and (decoded) body of all attachments,
+as a list of tuples.  The 'attachments' optic selects non-multipart
+entities with @Content-Disposition: attachment@.  The 'attachments'
+fold targets all entities with @Content-Disposition: attachment@.
+The 'transferDecoded'' optic undoes the @Content-Transfer-Encoding@
+of the entity.
+
+@
+λ> getFilename = preview ('contentDisposition' . _Just . 'filename' 'defaultCharsets')
+λ> getBody = preview ('transferDecoded'' . _Right . 'body')
+λ> getAttachment = liftA2 (,) getFilename getBody
+λ> toListOf ('attachments' . to getAttachment) msg2
+[(Just "data.json",Just "{\"foo\":42}")]
+@
+
+Finally, note that the 'filename' optic takes an argument: it is a
+function for looking up a character set.  Supporting every possible
+character encoding is a bit tricky so we let the user supply a map
+of supported charsets, and provide 'defaultCharsets' which supports
+ASCII, UTF-8 and ISO-8859-1.
+
+@
+λ> :t 'filename'
+filename
+  :: ('HasParameters' a, Applicative f) =>
+     'CharsetLookup' -> (T.Text -> f T.Text) -> a -> f a
+λ> :t 'defaultCharsets'
+defaultCharsets :: CharsetLookup
+λ> :i CharsetLookup
+type CharsetLookup = CI Char8.ByteString -> Maybe Data.MIME.Charset.Charset
+@
+
+-}
+
+{- $unicode
+
+In Australia we say "Hello world" upside down:
+
+@
+λ> msg3 = createTextPlainMessage "ɥǝןןo ʍoɹןp"
+λ> B.putStrLn $ renderMessage msg3
+MIME-Version: 1.0
+Content-Transfer-Encoding: base64
+Content-Disposition: inline
+Content-Type: text/plain; charset=utf-8
+
+yaXHndef159vIMqNb8m5159w
+
+@
+
+Charset set and transfer encoding are handled automatically.  If the
+message only includes characters representable in ASCII, the charset
+will be @us-ascii@, otherwise @utf-8@.
+
+To read the message as @Text@ you must perform transfer decoding and
+charset decoding.  The 'transferDecoded' optic performs transfer
+decoding, as does its sibling 'transferDecoded'' which is
+monomorphic in the error type.  Similarly, 'charsetText' and
+'charsetText'' perform text decoding according to the character set.
+
+If you don't mind throwing away decoding errors, the simplest way to
+get the text of a message is:
+
+@
+λ> Just ent = firstOf ('entities' . filtered isTextPlain) msg3
+λ> :t ent
+ent :: 'WireEntity'
+λ> text = preview ('transferDecoded'' . _Right . 'charsetText'' 'defaultCharsets' . _Right) ent
+λ> :t text
+text :: Maybe T.Text
+λ> traverse_ T.putStrLn text
+ɥǝןןo ʍoɹןp
+@
+
+As mentioned earlier, functions that perform text decoding take a
+'CharsetLookup' parameter, and we provide 'defaultCharsets' for
+convenience.
+
 -}
 
 
@@ -428,10 +524,10 @@ data EntityCharsetSource
   -- ^ Charset should be declared within payload (e.g. xml, rtf).
   --   The given function reads it from the payload.
   | InParameter (Maybe CharsetName)
-  -- ^ Charset should be declared in the 'charset' parameter,
+  -- ^ Charset should be declared in the @charset@ parameter,
   --   with optional fallback to the given default.
   | InBandOrParameter (B.ByteString -> Maybe CharsetName) (Maybe CharsetName)
-  -- ^ Check in-band first, fall back to 'charset' parameter,
+  -- ^ Check in-band first, fall back to @charset@ parameter,
   --   and further optionally fall back to a default.
 
 -- | Charset sources for text/* media types.  IANA registry:
@@ -721,7 +817,7 @@ replyHeaderReferences = (.) headers $ to $ \hdrs ->
 -- | Create a mixed `MIMEMessage` with an inline text/plain part and multiple
 -- `attachments`
 --
--- Additional headers can be set (e.g. 'cc') by using `At` and `Ixed`, for
+-- Additional headers can be set (e.g. @Cc@) by using `At` and `Ixed`, for
 -- example:
 --
 -- @
