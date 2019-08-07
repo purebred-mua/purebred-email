@@ -63,7 +63,7 @@ genMultipart1 = depths >>= go
     len <- choose (1, 10) -- up to 10 subparts, minimum of 1
     createMultipartMixedMessage
       <$> genBoundary
-      <*> vectorOf len (frequency [(3, genTextPlain), (1, go (n - 1))])
+      <*> vectorOf len (maybeAp encapsulate 5 $ frequency [(3, genTextPlain), (1, go (n - 1))])
           -- 75% plain, 25% nested multipart
 
   -- max depth of 4
@@ -74,8 +74,12 @@ genMultipart1 = depths >>= go
     , (1, pure 4)
     ]
 
+-- | Apply the function to the generated value with probability 1-in-/n/.
+maybeAp :: (a -> a) -> Int -> Gen a -> Gen a
+maybeAp f n g = frequency [(n - 1, g), (1, f <$> g)]
+
 genMessage :: Gen MIMEMessage
-genMessage = oneof [ genTextPlain, genMultipart1 ]
+genMessage = oneof [ genTextPlain, genMultipart1, encapsulate <$> genMessage ]
 
 
 prop_messageRoundTrip :: Property

@@ -85,16 +85,19 @@ module Data.MIME
   , buildMessage
 
   -- ** Mail creation
+  -- *** Common use cases
+  , createTextPlainMessage
+  , createAttachment
+  , createAttachmentFromFile
+  , createMultipartMixedMessage
+  , encapsulate
+  -- *** Setting headers
   , headerFrom
   , headerTo
   , headerCC
   , headerBCC
   , headerDate
   , replyHeaderReferences
-  , createAttachmentFromFile
-  , createAttachment
-  , createTextPlainMessage
-  , createMultipartMixedMessage
 
   -- * Re-exports
   , CharsetLookup
@@ -334,6 +337,7 @@ type TextEntity = Message () T.Text
 --
 data MIME
   = Part B.ByteString
+  | Encapsulated MIMEMessage
   | Multipart [MIMEMessage]
   deriving (Eq, Show)
 
@@ -350,6 +354,7 @@ entities :: Traversal' MIMEMessage WireEntity
 entities f (Message h a) = case a of
   Part b ->
     (\(Message h' b') -> Message h' (Part b')) <$> f (Message h b)
+  Encapsulated msg -> Message h . Encapsulated <$> entities f msg
   Multipart bs ->
     Message h . Multipart <$> sequenceA (entities f <$> bs)
 
@@ -711,8 +716,10 @@ mime'
 mime' takeTillEnd h = case view contentType h of
   ct | view ctType ct == "multipart" ->
     case preview (rawParameter "boundary") ct of
-      Nothing -> part
+      Nothing -> part  -- TODO should we rather throw an error?
       Just boundary -> Multipart <$> multipart takeTillEnd boundary
+     | matchContentType "message" (Just "rfc822") ct ->
+         Encapsulated <$> message (mime' takeTillEnd)
   _ -> part
   where
     part = Part <$> takeTillEnd
@@ -758,6 +765,8 @@ buildMessage = go . set (headers . at "MIME-Version") (Just "1.0")
   where
   go (Message h (Part partbody)) =
     buildFields h <> "\r\n" <> Builder.byteString partbody
+  go (Message h (Encapsulated msg)) =
+    buildFields h <> "\r\n" <> buildMessage msg
   go (Message h (Multipart xs)) =
     let b = firstOf (contentType . mimeBoundary) h
         boundary = maybe mempty (\b' -> "\r\n--" <> Builder.byteString b') b
@@ -871,3 +880,11 @@ createAttachment ct fp s = fmap Part $ transferEncode msg
   hdrs = mempty
           & set contentType ct
           & set contentDisposition (Just cd)
+
+-- | Encapsulate a message as a @message/rfc822@ message.
+-- You can use this in creating /forwarded/ or /bounce/ messages.
+--
+encapsulate :: MIMEMessage -> MIMEMessage
+encapsulate = Message hdrs . Encapsulated
+  where
+  hdrs = mempty & set contentType "message/rfc822"
