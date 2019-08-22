@@ -24,6 +24,7 @@ import Control.Monad ((<=<), void)
 import Data.Bifunctor (first)
 import Data.Char (toUpper)
 import Data.Either (isLeft)
+import Data.List.NonEmpty (fromList)
 import Data.String (fromString)
 
 import Control.Lens
@@ -133,14 +134,14 @@ testContentDisposition =
         set
           (attachments . headers . contentDisposition . traversed . filenameParameter)
           Nothing
-        (Message (Headers []) (Multipart
+        (Message (Headers []) (Multipart . fromList $
           [ Message (Headers [("Content-Disposition", "inline; filename=msg.txt")]) (Part "")
           , Message (Headers [("Content-Disposition", "attachment; filename=foo.pdf")]) (Part "")
           , Message (Headers [("Content-Disposition", "attachment; filename=bar.pdf")]) (Part "")
           ]
         ))
         @?=
-        Message (Headers []) (Multipart
+        Message (Headers []) (Multipart . fromList $
           [ Message (Headers [("Content-Disposition", "inline; filename=msg.txt")]) (Part "")
           , Message (Headers [("Content-Disposition", "attachment")]) (Part "")
           , Message (Headers [("Content-Disposition", "attachment")]) (Part "")

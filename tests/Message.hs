@@ -22,6 +22,7 @@ Generators and instances for messages and parts thereof.
 module Message where
 
 import Data.Char (isAscii, isPrint)
+import Data.List.NonEmpty (fromList)
 
 import qualified Data.ByteString.Char8 as B
 import qualified Data.Text as T
@@ -63,8 +64,10 @@ genMultipart1 = depths >>= go
     len <- choose (1, 10) -- up to 10 subparts, minimum of 1
     createMultipartMixedMessage
       <$> genBoundary
-      <*> vectorOf len (maybeAp encapsulate 5 $ frequency [(3, genTextPlain), (1, go (n - 1))])
-          -- 75% plain, 25% nested multipart
+      <*> ( fromList <$>
+            -- 75% plain, 25% nested multipart
+            vectorOf len (maybeAp encapsulate 5 $ frequency [(3, genTextPlain), (1, go (n - 1))])
+          )
 
   -- max depth of 4
   depths = frequency

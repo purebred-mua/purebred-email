@@ -3,6 +3,8 @@
 
 module Generator where
 
+import Data.List.NonEmpty (fromList)
+
 import Test.Tasty
 import Test.QuickCheck.Instances ()
 import Test.Tasty.HUnit ((@=?), testCase)
@@ -75,7 +77,7 @@ multiPartMail =
                 (Just "foo.bin")
                 "fileContentsASDF"
         now = UTCTime (ModifiedJulianDay 123) (secondsToDiffTime 123)
-    in createMultipartMixedMessage "asdf" [p, a]
+    in createMultipartMixedMessage "asdf" (fromList [p, a])
        & set (headers . at "From") (Just $ renderMailboxes [from'])
        . set (headers . at "To") (Just $ renderAddresses [to'])
        . set (headers . at "Date") (Just $ renderRFC5422Date now)

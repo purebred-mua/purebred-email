@@ -108,6 +108,7 @@ module Data.MIME
   ) where
 
 import Control.Applicative
+import Data.List.NonEmpty (NonEmpty, fromList)
 import Data.Maybe (fromMaybe, catMaybes)
 import Data.Semigroup ((<>))
 import Data.String (IsString(fromString))
@@ -338,7 +339,7 @@ type TextEntity = Message () T.Text
 data MIME
   = Part B.ByteString
   | Encapsulated MIMEMessage
-  | Multipart [MIMEMessage]
+  | Multipart (NonEmpty MIMEMessage)
   | FailedParse MIMEParseError B.ByteString
   deriving (Eq, Show)
 
@@ -742,9 +743,11 @@ data MIMEParseError
 multipart
   :: Parser B.ByteString  -- ^ parser to the end of the part
   -> B.ByteString         -- ^ boundary, sans leading "--"
-  -> Parser [MIMEMessage]
+  -> Parser (NonEmpty MIMEMessage)
 multipart takeTillEnd boundary =
-  multipartBody
+  skipTillString dashBoundary *> crlf -- FIXME transport-padding
+  *> fmap fromList (part `sepBy1` crlf)
+  <* string "--" <* takeTillEnd
   where
     delimiter = "\n--" <> boundary
     dashBoundary = B.tail delimiter
@@ -753,11 +756,6 @@ multipart takeTillEnd boundary =
       | B.null s = s
       | C8.last s == '\r' = B.init s
       | otherwise = s
-
-    multipartBody =
-      skipTillString dashBoundary *> crlf -- FIXME transport-padding
-      *> part `sepBy` crlf
-      <* string "--" <* takeTillEnd
 
 -- | Serialise a given `MIMEMessage` into a ByteString.
 --
@@ -854,7 +852,7 @@ replyHeaderReferences = (.) headers $ to $ \hdrs ->
 -- @
 createMultipartMixedMessage
     :: B.ByteString -- ^ Boundary
-    -> [MIMEMessage] -- ^ parts
+    -> NonEmpty MIMEMessage -- ^ parts
     -> MIMEMessage
 createMultipartMixedMessage b attachments' =
     let hdrs = mempty &
