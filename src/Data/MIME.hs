@@ -339,6 +339,7 @@ data MIME
   = Part B.ByteString
   | Encapsulated MIMEMessage
   | Multipart [MIMEMessage]
+  | FailedParse MIMEParseError B.ByteString
   deriving (Eq, Show)
 
 -- | Ignores the presence/absense of @MIME-Version@ header
@@ -348,7 +349,8 @@ instance EqMessage MIME where
     where
     stripVer = set (headers . at "MIME-Version") Nothing
 
--- | Get all leaf entities from the MIME message
+-- | Get all leaf entities from the MIME message.
+-- Entities that failed to parse are skipped.
 --
 entities :: Traversal' MIMEMessage WireEntity
 entities f (Message h a) = case a of
@@ -357,6 +359,7 @@ entities f (Message h a) = case a of
   Encapsulated msg -> Message h . Encapsulated <$> entities f msg
   Multipart bs ->
     Message h . Multipart <$> sequenceA (entities f <$> bs)
+  FailedParse _ _ -> pure (Message h a)
 
 -- | Leaf entities with @Content-Disposition: attachment@
 attachments :: Traversal' MIMEMessage WireEntity
@@ -716,13 +719,22 @@ mime'
 mime' takeTillEnd h = case view contentType h of
   ct | view ctType ct == "multipart" ->
     case preview (rawParameter "boundary") ct of
-      Nothing -> part  -- TODO should we rather throw an error?
-      Just boundary -> Multipart <$> multipart takeTillEnd boundary
+      Nothing -> FailedParse MultipartBoundaryNotSpecified <$> takeTillEnd
+      Just boundary ->
+        (Multipart <$> multipart takeTillEnd boundary)
+        <|> (FailedParse MultipartParseFail <$> takeTillEnd)
      | matchContentType "message" (Just "rfc822") ct ->
-         Encapsulated <$> message (mime' takeTillEnd)
+        (Encapsulated <$> message (mime' takeTillEnd))
+        <|> (FailedParse EncapsulatedMessageParseFail <$> takeTillEnd)
   _ -> part
   where
     part = Part <$> takeTillEnd
+
+data MIMEParseError
+  = MultipartBoundaryNotSpecified
+  | MultipartParseFail
+  | EncapsulatedMessageParseFail
+  deriving (Eq, Show)
 
 -- | Parse a multipart MIME message.  Preambles and epilogues are
 -- discarded.
@@ -763,16 +775,15 @@ renderMessage = toStrict . Builder.toLazyByteString . buildMessage
 buildMessage :: MIMEMessage -> Builder.Builder
 buildMessage = go . set (headers . at "MIME-Version") (Just "1.0")
   where
-  go (Message h (Part partbody)) =
-    buildFields h <> "\r\n" <> Builder.byteString partbody
-  go (Message h (Encapsulated msg)) =
-    buildFields h <> "\r\n" <> buildMessage msg
-  go (Message h (Multipart xs)) =
-    let b = firstOf (contentType . mimeBoundary) h
-        boundary = maybe mempty (\b' -> "\r\n--" <> Builder.byteString b') b
-        ents = foldMap (\part -> boundary <> "\r\n" <> go part) xs
-    in buildFields h <> ents <> boundary <> "--\r\n"
-
+  go (Message h z) = buildFields h <> case z of
+    Part partbody -> "\r\n" <> Builder.byteString partbody
+    Encapsulated msg -> "\r\n" <> buildMessage msg
+    Multipart xs ->
+      let b = firstOf (contentType . mimeBoundary) h
+          boundary = maybe mempty (\b' -> "\r\n--" <> Builder.byteString b') b
+          ents = foldMap (\part -> boundary <> "\r\n" <> go part) xs
+      in ents <> boundary <> "--\r\n"
+    FailedParse _ bs -> "\r\n" <> Builder.byteString bs
 
 headerFrom :: HasHeaders a => Lens' a [Mailbox]
 headerFrom = headers . lens getter setter
