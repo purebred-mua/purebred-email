@@ -14,6 +14,9 @@ Recognised charsets:
 * @utf-8@
 * @iso-8859-1@
 
+See also the <https://github.com/purebred-mua/purebred-icu purebred-icu>
+plugin, which adds support for many character sets.
+
 -}
 module Data.MIME.Charset
   (

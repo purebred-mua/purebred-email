@@ -185,7 +185,7 @@ Content-Type: application/json
 
 {- $parse
 
-99% of the time, you will parse a message like this:
+Most often you will parse a message like this:
 
 @
 λ> parsedMessage = 'parse' ('message' 'mime') s2
@@ -700,7 +700,7 @@ mimeBoundary = parameters . rawParameter "boundary"
 --
 -- Preambles and epilogues are discarded.
 --
--- This parser accepts non-MIME messages, and unconditionally
+-- This parser accepts non-MIME messages, and
 -- treats them as a single part.
 --
 mime :: Headers -> Parser MIME
@@ -818,10 +818,12 @@ headerDate = headers . lens getter setter
 -- fields from the parents message `Headers`. Rules to gather the values are in
 -- accordance to RFC5322 - 3.6.4 as follows sorted by priority (first has
 -- precedence):
--- * Values from 'References' and `Message-ID` (if any)
--- * Values from 'In-Reply-To' and 'Message-ID' (if any)
--- * Value from 'Message-ID' (in case it's the first reply to a parent mail)
--- * otherwise Nothing is returned indicating that the replying mail should not have a 'References' field.
+--
+-- * Values from @References@ and @Message-ID@ (if any)
+-- * Values from @In-Reply-To@ and @Message-ID@ (if any)
+-- * Value from @Message-ID@ (in case it's the first reply to a parent mail)
+-- * Otherwise @Nothing@ is returned indicating that the replying mail should
+--   not have a @References@ field.
 --
 replyHeaderReferences :: HasHeaders a => Getter a (Maybe C8.ByteString)
 replyHeaderReferences = (.) headers $ to $ \hdrs ->
