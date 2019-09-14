@@ -364,7 +364,7 @@ entities f (Message h a) = case a of
 
 -- | Leaf entities with @Content-Disposition: attachment@
 attachments :: Traversal' MIMEMessage WireEntity
-attachments = entities . filtered (isAttachment)
+attachments = entities . filtered isAttachment
 
 -- | MIMEMessage content disposition is an 'Attachment'
 isAttachment :: HasHeaders a => a -> Bool
@@ -883,7 +883,7 @@ createAttachmentFromFile ct fp = createAttachment ct (Just fp) <$> B.readFile fp
 -- filename parameter to the given file path.
 --
 createAttachment :: ContentType -> Maybe FilePath -> B.ByteString -> MIMEMessage
-createAttachment ct fp s = fmap Part $ transferEncode msg
+createAttachment ct fp s = Part <$> transferEncode msg
   where
   msg = Message hdrs s
   cd = ContentDisposition Attachment cdParams

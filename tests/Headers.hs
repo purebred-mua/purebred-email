@@ -81,27 +81,26 @@ rendersAddressesToTextSuccessfully :: TestTree
 rendersAddressesToTextSuccessfully =
   testGroup "renders addresses to text" $
   (\(desc, address, expected) ->
-     testCase desc $ expected @=? (AddressText.renderAddress address)) <$>
+     testCase desc $ expected @=? AddressText.renderAddress address) <$>
   xs
   where
     xs =
       [ ( "single address"
-        , (Single
-             (Mailbox Nothing (AddrSpec "foo" (DomainDotAtom $ pure "bar.com"))))
+        , Single
+            (Mailbox Nothing (AddrSpec "foo" (DomainDotAtom $ pure "bar.com")))
         , "foo@bar.com")
       , ( "group of addresses"
-        , (Group
-             "Group"
+        , Group "Group"
              [ Mailbox
                  (Just "Mr Foo")
                  (AddrSpec "foo" (DomainDotAtom $ pure "bar.com"))
              , Mailbox
                  (Just "Mr Bar")
                  (AddrSpec "bar" (DomainDotAtom $ pure "bar.com"))
-             ])
+             ]
         , "Group:\"Mr Foo\" <foo@bar.com>, \"Mr Bar\" <bar@bar.com>;")
       , ( "group of undisclosed recipients"
-        , (Group "undisclosed-recipients" [])
+        , Group "undisclosed-recipients" []
         , "undisclosed-recipients:;")
       ]
 
@@ -311,7 +310,7 @@ multipleMailboxes =
 
 -- | Generate headers
 genFieldItem :: Gen B.ByteString
-genFieldItem = resize 55 $ listOf1 (suchThat arbitrary isFtext) >>= pure . B.pack
+genFieldItem = resize 55 . B.pack <$> listOf1 (suchThat arbitrary isFtext)
 
 isFtext :: Word8 -> Bool
 isFtext c = (c >= 33 && c <= 57) || (c >= 59 && c <= 126)

@@ -167,9 +167,8 @@ crlf = void ((char '\r' *> char '\n') <|> char '\n')
 -- WSP."
 
 fws :: (Alternative (f s), CharParsing f s a) => (f s) s
-fws = optional (takeWhile isWsp *> crlf)
-      *> takeWhile1 isWsp
-      *> pure (singleton ' ')
+fws = ( optional (takeWhile isWsp *> crlf) *> takeWhile1 isWsp )
+      $> singleton ' '
 
 -- | FWS collapsed to a single SPACE character, or empty string
 --
@@ -192,7 +191,7 @@ comment =
 
 cfws :: (Alternative (f s), CharParsing f s a, SM s) => (f s) s
 cfws =
-  foldMany1 (optionalFWS <<>> comment) *> optionalFWS *> pure (singleton ' ')
+  ((foldMany1 (optionalFWS <<>> comment) *> optionalFWS) $> singleton ' ')
   <|> fws
 
 -- | CFWS collapsed to a single SPACE character, or empty string
