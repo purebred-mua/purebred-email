@@ -310,7 +310,7 @@ multipleMailboxes =
 
 -- | Generate headers
 genFieldItem :: Gen B.ByteString
-genFieldItem = resize 55 . B.pack <$> listOf1 (suchThat arbitrary isFtext)
+genFieldItem = resize 55 (B.pack <$> listOf1 (suchThat arbitrary isFtext))
 
 isFtext :: Word8 -> Bool
 isFtext c = (c >= 33 && c <= 57) || (c >= 59 && c <= 126)
