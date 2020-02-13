@@ -42,9 +42,29 @@ unittests = testGroup "Headers"
   , contentTypeTests
   , parameterTests
   , testReferencesField
+  , testFromToCcBccOptics
   , testProperty "field rendering round-trip" prop_renderHeadersRoundtrip
   , testProperty "folded fields no longer than 78 chars" prop_foldedUnstructuredLimited
   ]
+
+testFromToCcBccOptics :: TestTree
+testFromToCcBccOptics = testGroup "headerFrom/To/Cc/Bcc tests" $
+  let
+    alice = Mailbox Nothing (AddrSpec "alice" (DomainDotAtom ("example" :| ["com"])))
+    bob = Mailbox Nothing (AddrSpec "bob" (DomainDotAtom ("example" :| ["com"])))
+    carol = Mailbox Nothing (AddrSpec "carol" (DomainDotAtom ("example" :| ["com"])))
+    msg = createTextPlainMessage "hi"
+    fromAlice = set headerFrom [alice] msg
+    fromAliceToBob = set headerTo [Single bob] fromAlice
+    fromAliceToCarolAndBob = over headerTo (Single carol :) fromAliceToBob
+  in
+    [ testCase "From empty" $ view headerFrom msg @?= []
+    , testCase "To empty" $ view headerTo msg @?= []
+    , testCase "set From alice" $ view headerFrom fromAlice @?= [alice]
+    , testCase "set To bob" $ view headerTo fromAliceToBob @?= [Single bob]
+    , testCase "add To carol" $ view headerTo fromAliceToCarolAndBob @?= [Single carol, Single bob]
+    , testCase "removing header" $ has (header "From") (set headerFrom [] fromAlice) @?= False
+    ]
 
 rendersFieldsSuccessfully :: TestTree
 rendersFieldsSuccessfully =
