@@ -147,13 +147,34 @@ Create an inline, plain text message and render it:
 λ> B.putStrLn s
 MIME-Version: 1.0
 Content-Transfer-Encoding: 7bit
-Content-Type: text/plain; charset=us-ascii
 Content-Disposition: inline
+Content-Type: text/plain; charset=us-ascii
 
 Hello, world!
 @
 
-__TODO__ show how to set From,To,Cc,etc.
+Set the @From@ and @To@ headers:
+
+@
+λ> alice = Mailbox Nothing (AddrSpec "alice" (DomainDotAtom ("example" :| ["com"])))
+λ> bob = Mailbox Nothing (AddrSpec "bob" (DomainDotAtom ("example" :| ["net"])))
+λ> msgFromAliceToBob = set 'headerFrom' [alice] . set 'headerTo' [Single bob] $ msg
+λ> B.putStrLn (renderMessage msgFromAliceToBob)
+MIME-Version: 1.0
+From: alice@example.com
+To: bob@example.net
+Content-Transfer-Encoding: 7bit
+Content-Disposition: inline
+Content-Type: text/plain; charset=us-ascii
+
+Hello, world!
+@
+
+The 'headerFrom', 'headerTo', 'headerCC' and 'headerBCC' lenses are the most
+convenient interface for reading and setting the sender and recipient
+addresses.  Note that you would usually not manually construct email addresses
+manually as was done above.  Instead you would usually read it from another
+email or configuration, or parse addresses from user input.
 
 Create a multipart message with attachment:
 
