@@ -108,7 +108,7 @@ rendersAddressesToTextSuccessfully =
 mailboxFixtures :: IsString s => [(String, Either String Mailbox -> Assertion, s)]
 mailboxFixtures =
     [ ( "address with FQDN"
-      , (Right (Mailbox Nothing (AddrSpec "foo" (DomainDotAtom $ pure "bar.com"))) @=?)
+      , (Right (Mailbox Nothing (AddrSpec "foo" (DomainDotAtom $ "bar" :| ["com"]))) @=?)
       , "foo@bar.com")
     , ( "just with a host name"
       , (Right (Mailbox Nothing (AddrSpec "foo" (DomainDotAtom $ pure "bar"))) @=?)
@@ -144,7 +144,7 @@ mailboxFixtures =
       , assertBool "Parse error expected" . isLeft
       , "foo@,bar,com")
     , ( "displayName without quotes but with spaces"
-      , (Right (Mailbox (Just "John Doe") (AddrSpec "jdoe" (DomainDotAtom $ pure "machine.example"))) @=?)
+      , (Right (Mailbox (Just "John Doe") (AddrSpec "jdoe" (DomainDotAtom $ "machine" :| ["example"]))) @=?)
       , "John Doe <jdoe@machine.example>"
       )
     ]
@@ -166,14 +166,14 @@ parsesTextMailboxesSuccessfully =
 addresses :: IsString s => [(String, Either String Address -> Assertion, s)]
 addresses =
     [ ( "single address"
-      , (Right (Single (Mailbox Nothing (AddrSpec "foo" (DomainDotAtom $ pure "bar.com")))) @=?)
+      , (Right (Single (Mailbox Nothing (AddrSpec "foo" (DomainDotAtom $ "bar" :| ["com"])))) @=?)
       , "<foo@bar.com>")
     , ( "group of addresses"
       , (Right
              (Group
                   "Group"
-                  [ Mailbox (Just "Mr Foo") (AddrSpec "foo" (DomainDotAtom $ pure "bar.com"))
-                  , Mailbox (Just "Mr Bar") (AddrSpec "bar" (DomainDotAtom $ pure "bar.com"))]) @=?)
+                  [ Mailbox (Just "Mr Foo") (AddrSpec "foo" (DomainDotAtom $ "bar" :| ["com"]))
+                  , Mailbox (Just "Mr Bar") (AddrSpec "bar" (DomainDotAtom $ "bar" :| ["com"]))]) @=?)
       , "Group: \"Mr Foo\" <foo@bar.com>, \"Mr Bar\" <bar@bar.com>;")
     , ( "group of undisclosed recipients"
       , (Right (Group "undisclosed-recipients" []) @=?)
@@ -302,11 +302,6 @@ testReferencesField =
           set (at "message-id") (Just "messageid")
         , Just "references messageid")
       ]
-
-multipleMailboxes :: [Mailbox]
-multipleMailboxes =
-    [ Mailbox (Just "Mr Bar") (AddrSpec "bar" (DomainDotAtom $ pure "bar.com"))
-    , Mailbox Nothing (AddrSpec "roman" (DomainDotAtom $ pure "mail.test"))]
 
 -- | Generate headers
 genFieldItem :: Gen B.ByteString

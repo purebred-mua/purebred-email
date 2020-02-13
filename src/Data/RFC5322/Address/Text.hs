@@ -97,5 +97,5 @@ addressSpec :: Parser AddrSpec
 addressSpec = AddrSpec <$> (T.encodeUtf8 <$> localPart) <*> (char '@' *> domain)
 
 domain :: Parser Domain
-domain = (DomainDotAtom <$> (pure . T.encodeUtf8 <$> dotAtom))
-         <|> (DomainLiteral <$> (T.encodeUtf8 <$> domainLiteral))
+domain = (DomainDotAtom . fmap T.encodeUtf8 <$> dotAtom)
+         <|> (DomainLiteral . T.encodeUtf8 <$> domainLiteral)
