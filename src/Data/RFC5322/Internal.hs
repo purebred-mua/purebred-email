@@ -49,7 +49,6 @@ module Data.RFC5322.Internal
 import Prelude hiding (takeWhile)
 import Control.Applicative ((<|>), Alternative, liftA2, many, optional)
 import Control.Monad (void)
-import Control.Lens.Cons (Cons, cons)
 import qualified Data.Attoparsec.ByteString as A
 import qualified Data.Attoparsec.Internal as A
 import qualified Data.Attoparsec.Internal.Types as AT
@@ -61,8 +60,7 @@ import Data.CaseInsensitive (CI, FoldCase, mk, original)
 import Data.Char (chr)
 import Data.Foldable (fold)
 import Data.Functor (($>))
-import Data.List (intersperse)
-import Data.List.NonEmpty (fromList)
+import Data.List.NonEmpty (NonEmpty, fromList, intersperse)
 import Data.Semigroup (Semigroup((<>)))
 import Data.Semigroup.Foldable (fold1)
 import qualified Data.Text as T
@@ -208,16 +206,14 @@ word = atom <|> quotedString
 phrase :: (Alternative (f s), CharParsing f s a, SM s) => (f s) s
 phrase = foldMany1Sep (singleton ' ') word
 
-dotAtomText :: (Alternative (f s), CharParsing f s a, SM s, Cons s s a a) => (f s) s
-dotAtomText =
-  takeWhile1 isAtext
-  <<>> foldMany (char '.' *> (cons (fromChar '.') <$> takeWhile1 isAtext))
+dotAtomText :: (Alternative (f s), CharParsing f s a) => (f s) (NonEmpty s)
+dotAtomText = fromList <$> (takeWhile1 isAtext `A.sepBy1` char '.')
 
-dotAtom :: (Alternative (f s), CharParsing f s a, SM s, Cons s s a a) => (f s) s
+dotAtom :: (Alternative (f s), CharParsing f s a, SM s) => (f s) (NonEmpty s)
 dotAtom = optionalCFWS *> dotAtomText <* optionalCFWS
 
-localPart :: (Alternative (f s), CharParsing f s a, SM s, Cons s s a a) => (f s) s
-localPart = dotAtom <|> quotedString
+localPart :: (Alternative (f s), CharParsing f s a, SM s) => (f s) s
+localPart = (fold . intersperse (singleton '.') <$> dotAtom) <|> quotedString
 
 -- | Printable US-ASCII excl "[", "]", or "\"
 isDtext :: Char -> Bool
@@ -253,7 +249,7 @@ foldMany1 = fmap (fold1 . fromList) . A.many1
 
 -- | Parse one or more values and fold them with a separating element
 foldMany1Sep :: (Semigroup m, Alternative f) => m -> f m -> f m
-foldMany1Sep sep = fmap (fold1 . fromList . intersperse sep) . A.many1
+foldMany1Sep sep = fmap (fold1 . intersperse sep . fromList) . A.many1
 
 -- | Skip until the given parser succeeds
 --

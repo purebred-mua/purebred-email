@@ -275,7 +275,7 @@ isDtext :: Word8 -> Bool
 isDtext c = (c >= 33 && c <= 90) || (c >= 94 && c <= 126)
 
 domain :: Parser Domain
-domain = (DomainDotAtom <$> (pure <$> dotAtom))
+domain = (DomainDotAtom <$> dotAtom)
          <|> (DomainLiteral <$> domainLiteral)
 
 mailboxList :: Parser [Mailbox]
