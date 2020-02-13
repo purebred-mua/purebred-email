@@ -783,27 +783,30 @@ buildMessage = go . set (headers . at "MIME-Version") (Just "1.0")
       in ents <> boundary <> "--\r\n"
     FailedParse _ bs -> "\r\n" <> Builder.byteString bs
 
+
+-- | Map a single-occurrence header to a list value.
+-- On read, absent header is mapped to empty list.
+-- On write, empty list results in absent header.
+--
+headerSingleToList
+  :: (HasHeaders s)
+  => (B.ByteString -> [a])
+  -> ([a] -> B.ByteString)
+  -> CI B.ByteString
+  -> Lens' s [a]
+headerSingleToList f g k =
+  headers . at k . iso (maybe [] f) (\l -> if null l then Nothing else Just (g l))
+
 headerFrom :: HasHeaders a => Lens' a [Mailbox]
-headerFrom = headers . lens getter setter
-  where
-    getter = either (pure []) id . parseOnly mailboxList . view (header "from")
-    setter = flip $ set (header "from") . renderMailboxes
+headerFrom = headerSingleToList (either (const []) id . parseOnly mailboxList) renderMailboxes "From"
 
-headerTo :: HasHeaders a => Lens' a [Address]
-headerTo = headers . lens (headerGetter "to") (headerSetter "to")
+headerAddressList :: (HasHeaders a) => CI B.ByteString -> Lens' a [Address]
+headerAddressList = headerSingleToList (either (const []) id . parseOnly addressList) renderAddresses
 
-headerCC :: HasHeaders a => Lens' a [Address]
-headerCC = headers . lens (headerGetter "cc") (headerSetter "cc")
-
-headerBCC :: HasHeaders a => Lens' a [Address]
-headerBCC = headers . lens (headerGetter "bcc") (headerSetter "bcc")
-
-headerSetter :: CI B.ByteString -> Headers -> [Address] -> Headers
-headerSetter fieldname = flip $ set (header fieldname) . renderAddresses
-
-headerGetter :: CI C8.ByteString -> Headers -> [Address]
-headerGetter fieldname =
-    either (pure []) id . parseOnly addressList . view (header fieldname)
+headerTo, headerCC, headerBCC :: (HasHeaders a) => Lens' a [Address]
+headerTo = headerAddressList "To"
+headerCC = headerAddressList "Cc"
+headerBCC = headerAddressList "Bcc"
 
 headerDate :: HasHeaders a => Lens' a UTCTime
 headerDate = headers . lens getter setter
