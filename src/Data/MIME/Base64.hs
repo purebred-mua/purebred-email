@@ -9,7 +9,8 @@ Implementation of Base64 Content-Transfer-Encoding.
 -}
 module Data.MIME.Base64
   (
-    contentTransferEncodeBase64
+    b
+  , contentTransferEncodeBase64
   , contentTransferEncodingBase64
   ) where
 
@@ -61,4 +62,9 @@ contentTransferDecodeBase64 = B64.decode . B.filter isBase64Char
 contentTransferEncodingBase64 :: ContentTransferEncoding
 contentTransferEncodingBase64 = prism'
   contentTransferEncodeBase64
+  (either (const Nothing) Just . contentTransferDecodeBase64)
+
+b :: ContentTransferEncoding
+b = prism'
+  B64.encode
   (either (const Nothing) Just . contentTransferDecodeBase64)

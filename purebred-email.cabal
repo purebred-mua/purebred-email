@@ -89,6 +89,7 @@ test-suite tests
   main-is: Test.hs
   other-modules:
     ContentTransferEncodings
+    , EncodedWord
     , Headers
     , MIME
     , Generator
