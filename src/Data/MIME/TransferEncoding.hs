@@ -103,7 +103,7 @@ transferEncodings =
   , ("quoted-printable", contentTransferEncodingQuotedPrintable)
   , ("base64", contentTransferEncodingBase64)
   , ("q", q)
-  , ("b", contentTransferEncodingBase64)
+  , ("b", b)
   ]
 
 -- | Inspect the data and choose a transfer encoding to use: @7bit@

@@ -13,14 +13,17 @@ module Data.MIME.EncodedWord
   , decodeEncodedWords
   , EncodedWord
   , encodedWord
+  , encodeEncodedWords
   ) where
 
 import Control.Applicative ((<|>), liftA2, optional)
 import Data.Semigroup ((<>))
+import Data.Monoid (Sum(Sum), Any(Any))
 
-import Control.Lens (to, clonePrism, review, view)
+import Control.Lens (to, clonePrism, review, view, foldMapOf)
 import Data.Attoparsec.ByteString
 import Data.Attoparsec.ByteString.Char8 (char8)
+import Data.ByteString.Lens (bytes)
 import qualified Data.ByteString as B
 import qualified Data.CaseInsensitive as CI
 import qualified Data.Text as T
@@ -29,6 +32,7 @@ import qualified Data.Text.Encoding as T
 import Data.MIME.Charset
 import Data.MIME.Error (EncodingError)
 import Data.MIME.TransferEncoding
+import Data.MIME.Base64
 import Data.MIME.QuotedPrintable
 import Data.RFC5322.Internal (ci, takeTillString)
 
@@ -145,3 +149,30 @@ decodeEncodedWord charsets w =
     (decodeLenient . const (serialiseEncodedWord w) :: EncodingError -> T.Text)
     id
     (view transferDecoded w >>= view (charsetDecoded charsets))
+
+-- | This function encodes necessary parts of some text
+--
+-- Currently turns the whole text into a single encoded word, if necessary.
+encodeEncodedWords :: T.Text -> B.ByteString
+encodeEncodedWords s =
+  maybe
+  utf8
+  (uncurry ((serialiseEncodedWord .) . (. cteOf) . EncodedWord "utf-8" Nothing))
+  (chooseEncodedWordEncoding utf8)
+  where
+    cteOf cte = review (clonePrism cte) utf8
+    utf8 = T.encodeUtf8 s
+
+chooseEncodedWordEncoding :: B.ByteString -> Maybe (TransferEncodingName, TransferEncoding)
+chooseEncodedWordEncoding s
+  | not doEnc = Nothing
+  | nQP < nB64 = Just ("Q", q)
+  | otherwise = Just ("B", b)
+  where
+    -- https://tools.ietf.org/html/rfc5322#section-3.5 'text'
+    needEnc c = c > 127 || c == 0
+    qpBytes c
+      | encodingRequiredNonEOL Q c = 3
+      | otherwise = 1
+    (Any doEnc, Sum nQP) = foldMapOf bytes (\c -> (Any (needEnc c), Sum (qpBytes c))) s
+    nB64 = ((B.length s + 2) `div` 3) * 4
