@@ -104,6 +104,7 @@ module Data.RFC5322
   , renderRFC5422Date
   , buildFields
   , buildField
+  , renderAddressSpec
   , renderMailbox
   , renderMailboxes
   , renderAddress
@@ -241,7 +242,7 @@ buildMailbox :: Mailbox -> Builder.Builder
 buildMailbox (Mailbox n a) =
   maybe a' (\n' -> renderDisplayName n' <> "<" <> a' <> ">") n
   where
-    a' = renderAddressSpec a
+    a' = buildAddressSpec a
 
 renderDisplayName :: T.Text -> Builder.Builder
 renderDisplayName x =
@@ -271,15 +272,18 @@ angleAddr = optionalCFWS *>
   char8 '<' *> addressSpec <* char8 '>'
   <* optionalCFWS
 
-renderAddressSpec :: AddrSpec -> Builder.Builder
-renderAddressSpec (AddrSpec lp (DomainDotAtom b))
+buildAddressSpec :: AddrSpec -> Builder.Builder
+buildAddressSpec (AddrSpec lp (DomainDotAtom b))
   | " " `B.isInfixOf` lp = "\"" <> buildLP <> "\"" <> rest
   | otherwise = buildLP <> rest
   where
     buildLP = Builder.byteString lp
     rest = "@" <> foldMap Builder.byteString (Data.List.NonEmpty.intersperse "." b)
-renderAddressSpec (AddrSpec lp (DomainLiteral b)) =
+buildAddressSpec (AddrSpec lp (DomainLiteral b)) =
   foldMap Builder.byteString [lp, "@", b]
+
+renderAddressSpec :: AddrSpec -> B.ByteString
+renderAddressSpec = toStrict . Builder.toLazyByteString . buildAddressSpec
 
 addressSpec :: Parser AddrSpec
 addressSpec = AddrSpec <$> localPart <*> (char8 '@' *> domain)
