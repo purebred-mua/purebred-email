@@ -15,6 +15,7 @@ module Data.RFC5322.Address.Text
   , renderMailboxes
   , renderAddress
   , renderAddresses
+  , renderAddressSpec
   ) where
 
 import Control.Applicative ((<|>), optional)
@@ -48,7 +49,7 @@ buildMailbox :: Mailbox -> Builder.Builder
 buildMailbox (Mailbox n a) =
   maybe a' (\n' -> "\"" <> Builder.fromText n' <> "\" " <> "<" <> a' <> ">") n
   where
-    a' = renderAddressSpec a
+    a' = buildAddressSpec a
 
 renderAddresses :: [Address] -> T.Text
 renderAddresses xs = T.intercalate ", " $ renderAddress <$> xs
@@ -57,15 +58,18 @@ renderAddress :: Address -> T.Text
 renderAddress (Single m) = renderMailbox m
 renderAddress (Group name xs) = name <> ":" <> renderMailboxes xs <> ";"
 
-renderAddressSpec :: AddrSpec -> Builder.Builder
-renderAddressSpec (AddrSpec lp (DomainDotAtom b))
+buildAddressSpec :: AddrSpec -> Builder.Builder
+buildAddressSpec (AddrSpec lp (DomainDotAtom b))
   | " " `B.isInfixOf` lp = "\"" <> buildLP <> "\"" <> rest
   | otherwise = buildLP <> rest
   where
     buildLP = Builder.fromText $ decodeLenient lp
     rest = "@" <> foldMap Builder.fromText (decodeLenient <$> Data.List.NonEmpty.intersperse "." b)
-renderAddressSpec (AddrSpec lp (DomainLiteral b)) =
+buildAddressSpec (AddrSpec lp (DomainLiteral b)) =
   foldMap Builder.fromText [decodeLenient lp, "@", decodeLenient b]
+
+renderAddressSpec :: AddrSpec -> T.Text
+renderAddressSpec = LT.toStrict . Builder.toLazyText . buildAddressSpec
 
 
 -- §3.4 Address Specification
