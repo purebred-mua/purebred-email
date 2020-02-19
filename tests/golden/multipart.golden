@@ -6,12 +6,14 @@ Subject: Hello there
 Content-Type: multipart/mixed; boundary=asdf
 
 --asdf
+MIME-Version: 1.0
 Content-Transfer-Encoding: 7bit
 Content-Disposition: inline
 Content-Type: text/plain; charset=us-ascii
 
 This is a simple mail.
 --asdf
+MIME-Version: 1.0
 Content-Transfer-Encoding: 7bit
 Content-Disposition: attachment; filename=foo.bin
 Content-Type: application/octet-stream
