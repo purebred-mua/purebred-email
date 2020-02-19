@@ -723,9 +723,9 @@ mimeBoundary = parameters . rawParameter "boundary"
 -- This parser accepts non-MIME messages, and
 -- treats them as a single part.
 --
-mime :: Headers -> Parser MIME
+mime :: Headers -> BodyHandler MIME
 mime h
-  | nullOf (header "MIME-Version") h = Part <$> takeByteString
+  | nullOf (header "MIME-Version") h = RequiredBody (Part <$> takeByteString)
   | otherwise = mime' takeByteString h
 
 type instance MessageContext MIME = EncStateWire
@@ -736,8 +736,8 @@ mime'
   -- multipart, we pass it on to the 'multipart' parser.  If this
   -- part is not multipart, we just do the take.
   -> Headers
-  -> Parser MIME
-mime' takeTillEnd h = case view contentType h of
+  -> BodyHandler MIME
+mime' takeTillEnd h = RequiredBody $ case view contentType h of
   ct | view ctType ct == "multipart" ->
     case preview (rawParameter "boundary") ct of
       Nothing -> FailedParse MultipartBoundaryNotSpecified <$> takeTillEnd

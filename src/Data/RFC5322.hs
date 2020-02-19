@@ -1,4 +1,5 @@
 {-# LANGUAGE AllowAmbiguousTypes #-}
+{-# LANGUAGE DefaultSignatures #-}
 {-# LANGUAGE DeriveAnyClass #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE FlexibleContexts #-}
@@ -22,7 +23,7 @@ The main parsing function is 'message'.  It takes a second function
 that can inspect the headers to determine how to parse the body.
 
 @
-'message' :: ('Headers' -> Parser a) -> Parser (Message ctx a)
+'message' :: ('Headers' -> 'BodyHandler' a) -> Parser (Message ctx a)
 @
 
 The 'Message' type is parameterised over the body type, and a
@@ -64,6 +65,7 @@ module Data.RFC5322
     Message(..)
   , message
   , MessageContext
+  , BodyHandler(..)
   , body
   , EqMessage(..)
 
@@ -199,8 +201,14 @@ instance Functor (Message s) where
 -- possibly in response to body data, or vice-versa, when
 -- comparing messages.
 --
+-- The default implementation compares headers and body using (==).
+--
 class EqMessage a where
   eqMessage :: Message s a -> Message s a -> Bool
+
+  default eqMessage :: (Eq a) => Message s a -> Message s a -> Bool
+  eqMessage (Message h1 b1) (Message h2 b2) = h1 == h2 && b1 == b2
+
 
 instance EqMessage a => Eq (Message s a) where
   (==) = eqMessage
@@ -306,13 +314,25 @@ address = group <|> Single <$> mailbox
 -- §3.5.  Overall Message Syntax
 
 
--- | Parse a message, given function from headers to body parser
+-- | Specify how to handle a message body, including the possibility
+-- of optional bodies and no body (which is distinct from empty body).
+data BodyHandler a
+  = RequiredBody (Parser a)
+  | OptionalBody (Parser a, a)
+  -- ^ If body is present run parser, otherwise use constant value
+  | NoBody a
+
+-- | Parse a message.  The function argument receives the headers and
+-- yields a handler for the message body.
 --
 -- This parser does not handle the legitimate but obscure case
 -- of a message with no body (empty body is fine, though).
 --
-message :: (Headers -> Parser a) -> Parser (Message (MessageContext a) a)
-message f = fields >>= \hdrs -> Message hdrs <$> (crlf *> f hdrs)
+message :: (Headers -> BodyHandler a) -> Parser (Message (MessageContext a) a)
+message f = fields >>= \hdrs -> Message hdrs <$> case f hdrs of
+  RequiredBody b -> crlf *> b
+  OptionalBody (b, a) -> optional crlf >>= maybe (pure a) (const b)
+  NoBody b -> pure b
 
 type family MessageContext a = s
 
