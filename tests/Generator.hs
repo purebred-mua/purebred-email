@@ -34,7 +34,7 @@ renderSimpleMailSuccessfully =
         "renders simple mail"
         diffCommand
         "tests/golden/textplain7bit.golden"
-        (pure $ LB.fromStrict $ renderMessage textPlain7bit)
+        (pure $ renderMessage textPlain7bit)
 
 diffCommand :: FilePath -> FilePath -> [String]
 diffCommand ref new =
@@ -50,7 +50,7 @@ rendersMultiPartSuccessfully =
         "renders simple, multi-part mail"
         diffCommand
         "tests/golden/multipart.golden"
-        (pure $ LB.fromStrict $ renderMessage multiPartMail)
+        (pure $ renderMessage multiPartMail)
 
 exampleMailsParseSuccessfully :: TestTree
 exampleMailsParseSuccessfully =

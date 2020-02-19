@@ -80,10 +80,6 @@ module Data.MIME
   , filename
   , filenameParameter
 
-  -- ** Serialisation
-  , renderMessage
-  , buildMessage
-
   -- ** Mail creation
   -- *** Common use cases
   , createTextPlainMessage
@@ -108,7 +104,8 @@ module Data.MIME
   ) where
 
 import Control.Applicative
-import Data.List.NonEmpty (NonEmpty, fromList)
+import Data.Foldable (fold)
+import Data.List.NonEmpty (NonEmpty, fromList, intersperse)
 import Data.Maybe (fromMaybe, catMaybes)
 import Data.Semigroup ((<>))
 import Data.String (IsString(fromString))
@@ -121,7 +118,6 @@ import Data.Attoparsec.ByteString.Char8 (char8)
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Char8 as C8
 import qualified Data.ByteString.Builder as Builder
-import Data.ByteString.Lazy (toStrict)
 import qualified Data.CaseInsensitive as CI
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
@@ -201,6 +197,9 @@ Content-Type: application/json
 --boundary--
 
 @
+
+__NOTE:__ if you only need to write a serialised 'Message' to an 
+IO handle, 'buildMessage' is more efficient than 'renderMessage'.
 
 -}
 
@@ -778,31 +777,22 @@ multipart takeTillEnd boundary =
       | C8.last s == '\r' = B.init s
       | otherwise = s
 
--- | Serialise a given `MIMEMessage` into a ByteString.
+-- | Sets the @MIME-Version: 1.0@ header.
 --
--- Sets the @MIME-Version: 1.0@ header (on the top-level message only).
--- No other headers are set.
---
-renderMessage :: MIMEMessage -> B.ByteString
-renderMessage = toStrict . Builder.toLazyByteString . buildMessage
-
--- | Serialise a given `MIMEMessage` using a `Builder`
---
--- Sets the @MIME-Version: 1.0@ header (on the top-level message only).
--- No other headers are set.
---
-buildMessage :: MIMEMessage -> Builder.Builder
-buildMessage = go . set (headers . at "MIME-Version") (Just "1.0")
-  where
-  go (Message h z) = buildFields h <> case z of
-    Part partbody -> "\r\n" <> Builder.byteString partbody
-    Encapsulated msg -> "\r\n" <> buildMessage msg
+instance RenderMessage MIME where
+  tweakHeaders = set (headers . at "MIME-Version") (Just "1.0")
+  buildBody h z = Just $ case z of
+    Part partbody -> Builder.byteString partbody
+    Encapsulated msg -> buildMessage msg
     Multipart xs ->
       let b = firstOf (contentType . mimeBoundary) h
-          boundary = maybe mempty (\b' -> "\r\n--" <> Builder.byteString b') b
-          ents = foldMap (\part -> boundary <> "\r\n" <> go part) xs
-      in ents <> boundary <> "--\r\n"
-    FailedParse _ bs -> "\r\n" <> Builder.byteString bs
+          boundary = maybe mempty (\b' -> "--" <> Builder.byteString b') b
+      in
+        boundary <> "\r\n"
+        <> fold (intersperse ("\r\n" <> boundary <> "\r\n") (fmap buildMessage xs))
+        <> "\r\n" <> boundary <> "--\r\n"
+    FailedParse _ bs -> Builder.byteString bs
+
 
 
 -- | Map a single-occurrence header to a list value.

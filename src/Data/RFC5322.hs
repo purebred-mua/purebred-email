@@ -1,8 +1,11 @@
+{-# LANGUAGE AllowAmbiguousTypes #-}
 {-# LANGUAGE DeriveAnyClass #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeFamilies #-}
 
 {- |
@@ -93,6 +96,9 @@ module Data.RFC5322
   , rfc5422DateTimeFormat
 
   -- * Serialisation
+  , buildMessage
+  , renderMessage
+  , RenderMessage(..)
   , renderRFC5422Date
   , buildFields
   , buildField
@@ -117,7 +123,7 @@ import Data.Attoparsec.ByteString as A hiding (parse, take)
 import Data.Attoparsec.ByteString.Char8 (char8)
 import qualified Data.Attoparsec.ByteString.Lazy as AL
 import qualified Data.ByteString as B
-import Data.ByteString.Lazy (toStrict)
+import qualified Data.ByteString.Lazy as L
 import qualified Data.ByteString.Char8 as Char8
 import qualified Data.ByteString.Builder as Builder
 import qualified Data.Text as T
@@ -237,13 +243,13 @@ renderDisplayName x =
         , "\" "]
 
 renderMailboxes :: [Mailbox] -> B.ByteString
-renderMailboxes = toStrict . Builder.toLazyByteString . buildMailboxes
+renderMailboxes = L.toStrict . Builder.toLazyByteString . buildMailboxes
 
 buildMailboxes :: [Mailbox] -> Builder.Builder
 buildMailboxes = fold . Data.List.intersperse ", " . fmap buildMailbox
 
 renderMailbox :: Mailbox -> B.ByteString
-renderMailbox = toStrict . Builder.toLazyByteString . buildMailbox
+renderMailbox = L.toStrict . Builder.toLazyByteString . buildMailbox
 
 mailbox :: Parser Mailbox
 mailbox = Mailbox <$> optional displayName <*> angleAddr
@@ -313,6 +319,32 @@ type family MessageContext a = s
 
 fields :: Parser Headers
 fields = Headers <$> many field
+
+-- | Define how to render an RFC 5322 message with given payload type.
+--
+class RenderMessage a where
+  -- | Build the body.  If there should be no body (as distinct from
+  -- /empty body/) return Nothing
+  buildBody :: Headers -> a -> Maybe Builder.Builder
+
+  -- | Allows tweaking the headers before rendering.  Default
+  -- implementation is a no-op.
+  tweakHeaders :: Headers -> Headers
+  tweakHeaders = id
+
+-- | Construct a 'Builder.Builder' for the message.  This allows efficient
+-- streaming to IO handles.
+--
+buildMessage :: forall ctx a. (RenderMessage a) => Message ctx a -> Builder.Builder
+buildMessage (Message h b) =
+  buildFields (tweakHeaders @a h)
+  <> maybe mempty ("\r\n" <>) (buildBody h b)
+
+-- | Render a message to a lazy 'L.ByteString'.  (You will probably not
+-- need a strict @ByteString@ and it is inefficient for most use cases.)
+--
+renderMessage :: (RenderMessage a) => Message ctx a -> L.ByteString
+renderMessage = Builder.toLazyByteString . buildMessage
 
 -- Header serialisation
 buildFields :: Headers -> Builder.Builder
