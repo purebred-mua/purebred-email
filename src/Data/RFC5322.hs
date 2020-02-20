@@ -325,9 +325,6 @@ data BodyHandler a
 -- | Parse a message.  The function argument receives the headers and
 -- yields a handler for the message body.
 --
--- This parser does not handle the legitimate but obscure case
--- of a message with no body (empty body is fine, though).
---
 message :: (Headers -> BodyHandler a) -> Parser (Message (MessageContext a) a)
 message f = fields >>= \hdrs -> Message hdrs <$> case f hdrs of
   RequiredBody b -> crlf *> b
