@@ -96,6 +96,7 @@ module Data.RFC5322
   -- * Helpers
   , field
   , rfc5422DateTimeFormat
+  , rfc5422DateTimeFormatLax
 
   -- * Serialisation
   , buildMessage
@@ -232,6 +233,9 @@ special = satisfy isSpecial
 -- Sat, 29 Sep 2018 12:51:05 +1000
 rfc5422DateTimeFormat :: String
 rfc5422DateTimeFormat = "%a, %d %b %Y %T %z"
+
+rfc5422DateTimeFormatLax :: String
+rfc5422DateTimeFormatLax = "%a, %-d %b %Y %-H:%-M:%-S %z"
 
 renderRFC5422Date :: UTCTime -> B.ByteString
 renderRFC5422Date = Char8.pack . formatTime defaultTimeLocale rfc5422DateTimeFormat

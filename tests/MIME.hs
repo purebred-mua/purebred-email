@@ -26,6 +26,7 @@ import Data.Char (toUpper)
 import Data.Either (isLeft)
 import Data.List.NonEmpty (fromList)
 import Data.String (fromString)
+import Data.Time.Clock (UTCTime)
 
 import Control.Lens
 import qualified Data.ByteString as B
@@ -43,6 +44,7 @@ unittests :: TestTree
 unittests = testGroup "MIME tests"
   [ testContentDisposition
   , testParse
+  , testOptics
   , testParameterValueOverloadedStrings
   , testContentTypeOverloadedStrings
   ]
@@ -191,3 +193,31 @@ testContentTypeOverloadedStrings = testGroup "ContentType fromString"
       (isLeft <$> (try . evaluate $ fromString "foo/; baz=quux" :: IO (Either ErrorCall ContentType)))
       >>= assertBool "bogus string throws error"
   ]
+
+testOptics :: TestTree
+testOptics = testGroup "optics tests"
+  [ testCase "headerDate get valid date" $
+      testHeaderDateGet
+      "Thu, 4 May 2017 03:08:43 +0000"
+      (Just $ read "2017-05-04 03:08:43 UTC")
+  , testCase "headerDate get invalid date" $
+      testHeaderDateGet
+      "Thu, 4 NOTMAY 2017 03:08:43 +0000"
+      Nothing
+  , testCase "headerDate set" $
+      testHeaderDateSet (Just $ read "2017-05-04 03:08:43 UTC")
+  , testCase "headerDate unset" $ testHeaderDateSet Nothing
+  ]
+
+testHeaderDateGet :: B.ByteString -> Maybe UTCTime -> Assertion
+testHeaderDateGet headerStr time =
+  view headerDate msg @?= time
+  where
+    Right msg = parse (message mime) msgStr
+    msgStr = "Date: " <> headerStr <> "\n\nbody\n" :: B.ByteString
+
+testHeaderDateSet :: Maybe UTCTime -> Assertion
+testHeaderDateSet time =
+  view headerDate msg @?= time
+  where
+    msg = set headerDate time $ createTextPlainMessage "body"
