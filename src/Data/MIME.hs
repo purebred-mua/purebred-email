@@ -122,7 +122,7 @@ import qualified Data.CaseInsensitive as CI
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
 import Data.Time.Clock (UTCTime)
-import Data.Time.Format (defaultTimeLocale, parseTimeOrError)
+import Data.Time.Format (defaultTimeLocale, parseTimeM)
 
 import Data.RFC5322
 import Data.RFC5322.Internal
@@ -819,14 +819,11 @@ headerTo = headerAddressList "To"
 headerCC = headerAddressList "Cc"
 headerBCC = headerAddressList "Bcc"
 
-headerDate :: HasHeaders a => Lens' a UTCTime
-headerDate = headers . lens getter setter
+headerDate :: HasHeaders a => Lens' a (Maybe UTCTime)
+headerDate = headers . at "date" . iso (parseDate =<<) (fmap renderRFC5422Date)
   where
-    -- TODO for parseTimeOrError. See #16
-    getter =
-        parseTimeOrError True defaultTimeLocale rfc5422DateTimeFormat
-        . C8.unpack . view (header "date")
-    setter hdrs x = set (header "date") (renderRFC5422Date x) hdrs
+    parseDate =
+        parseTimeM True defaultTimeLocale rfc5422DateTimeFormatLax . C8.unpack
 
 -- | Returns a space delimited `B.ByteString` with values from identification
 -- fields from the parents message `Headers`. Rules to gather the values are in
