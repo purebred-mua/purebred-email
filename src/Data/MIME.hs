@@ -820,7 +820,7 @@ headerCC = headerAddressList "Cc"
 headerBCC = headerAddressList "Bcc"
 
 headerDate :: HasHeaders a => Lens' a (Maybe UTCTime)
-headerDate = headers . at "date" . iso (parseDate =<<) (fmap renderRFC5422Date)
+headerDate = headers . at "Date" . iso (parseDate =<<) (fmap renderRFC5422Date)
   where
     parseDate =
         parseTimeM True defaultTimeLocale rfc5422DateTimeFormatLax . C8.unpack
