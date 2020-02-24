@@ -287,7 +287,7 @@ buildAddressSpec (AddrSpec lp (DomainLiteral b)) =
   foldMap Builder.byteString [lp, "@", b]
 
 renderAddressSpec :: AddrSpec -> B.ByteString
-renderAddressSpec = toStrict . Builder.toLazyByteString . buildAddressSpec
+renderAddressSpec = L.toStrict . Builder.toLazyByteString . buildAddressSpec
 
 addressSpec :: Parser AddrSpec
 addressSpec = AddrSpec <$> localPart <*> (char8 '@' *> domain)
