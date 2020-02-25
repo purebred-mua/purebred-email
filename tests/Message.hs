@@ -14,6 +14,9 @@
 -- You should have received a copy of the GNU Affero General Public License
 -- along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
+{-# LANGUAGE NoMonomorphismRestriction #-}
+{-# LANGUAGE OverloadedStrings #-}
+
 {- |
 
 Generators and instances for messages and parts thereof.
@@ -22,19 +25,24 @@ Generators and instances for messages and parts thereof.
 module Message where
 
 import Data.Char (isAscii, isPrint)
-import Data.List.NonEmpty (fromList)
+import Data.Foldable (fold)
+import Data.List.NonEmpty (NonEmpty, fromList, intersperse)
 
+import Control.Lens (set, view)
 import qualified Data.ByteString.Char8 as B
 import qualified Data.Text as T
 
+import Test.QuickCheck.Instances ()
 import Test.Tasty
 import Test.Tasty.QuickCheck
 
 import Data.MIME
+import Data.RFC5322.Internal (isAtext)
 
 tests :: TestTree
 tests = testGroup "message tests"
   [ testProperty "message round trip" prop_messageRoundTrip
+  , testProperty "message round trip with From header" prop_messageFromRoundTrip
   ]
 
 genPrintAsciiChar :: Gen Char
@@ -87,3 +95,27 @@ genMessage = oneof [ genTextPlain, genMultipart1, encapsulate <$> genMessage ]
 prop_messageRoundTrip :: Property
 prop_messageRoundTrip = forAll genMessage $ \msg ->
   parse (message mime) (renderMessage msg) == Right msg
+
+prop_messageFromRoundTrip :: Property
+prop_messageFromRoundTrip = forAll genMailbox $ \mailbox ->
+  let
+    l = headerFrom defaultCharsets
+    msg = set l [mailbox] (createTextPlainMessage "Hello")
+  in
+    (view l <$> parse (message mime) (renderMessage msg))
+    == Right [mailbox]
+
+genDomain :: Gen Domain
+genDomain = DomainDotAtom <$> genDotAtom -- TODO domain literal
+
+genDotAtom :: Gen (NonEmpty B.ByteString)
+genDotAtom = fromList <$> listOf1 (B.pack <$> listOf1 (arbitrary `suchThat` isAtext))
+
+genLocalPart :: Gen B.ByteString
+genLocalPart = fold . intersperse "." <$> genDotAtom
+
+genAddrSpec :: Gen AddrSpec
+genAddrSpec = AddrSpec <$> genLocalPart <*> genDomain
+
+genMailbox :: Gen Mailbox
+genMailbox = Mailbox <$> arbitrary <*> genAddrSpec
