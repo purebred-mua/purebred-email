@@ -136,8 +136,14 @@ import Data.Time.Clock (UTCTime)
 import Data.Time.Format (defaultTimeLocale, formatTime)
 
 import Data.RFC5322.Internal
+  ( CI, ci, original
+  , (<<>>), foldMany, foldMany1Sep
+  , optionalCFWS, word, wsp, isWsp, vchar, optionalFWS, crlf
+  , domainLiteral, dotAtom, localPart, quotedString
+  )
 import Data.RFC5322.Address.Types
-import Data.MIME.Charset (decodeLenient)
+import Data.MIME.Charset (CharsetLookup, decodeLenient)
+import Data.MIME.EncodedWord (encodedWord, decodeEncodedWord)
 
 type Header = (CI B.ByteString, B.ByteString)
 newtype Headers = Headers [Header]
@@ -264,12 +270,18 @@ buildMailboxes = fold . Data.List.intersperse ", " . fmap buildMailbox
 renderMailbox :: Mailbox -> B.ByteString
 renderMailbox = L.toStrict . Builder.toLazyByteString . buildMailbox
 
-mailbox :: Parser Mailbox
-mailbox = Mailbox <$> optional displayName <*> angleAddr
-          <|> Mailbox Nothing <$> addressSpec
+mailbox :: CharsetLookup -> Parser Mailbox
+mailbox charsets =
+  Mailbox <$> optional (displayName charsets) <*> angleAddr
+  <|> Mailbox Nothing <$> addressSpec
 
-displayName :: Parser T.Text
-displayName = decodeLenient <$> phrase
+phrase :: CharsetLookup -> Parser T.Text
+phrase charsets = foldMany1Sep " " $
+  fmap (decodeEncodedWord charsets) ("=?" *> encodedWord)
+  <|> fmap decodeLenient word
+
+displayName :: CharsetLookup -> Parser T.Text
+displayName = phrase
 
 angleAddr :: Parser AddrSpec
 angleAddr = optionalCFWS *>
@@ -300,8 +312,8 @@ domain :: Parser Domain
 domain = (DomainDotAtom <$> dotAtom)
          <|> (DomainLiteral <$> domainLiteral)
 
-mailboxList :: Parser [Mailbox]
-mailboxList = mailbox `sepBy` char8 ','
+mailboxList :: CharsetLookup -> Parser [Mailbox]
+mailboxList charsets = mailbox charsets `sepBy` char8 ','
 
 renderAddresses :: [Address] -> B.ByteString
 renderAddresses xs = B.intercalate ", " $ renderAddress <$> xs
@@ -310,14 +322,17 @@ renderAddress :: Address -> B.ByteString
 renderAddress (Single m) = renderMailbox m
 renderAddress (Group name xs) = T.encodeUtf8 name <> ":" <> renderMailboxes xs <> ";"
 
-addressList :: Parser [Address]
-addressList = address `sepBy` char8 ','
+addressList :: CharsetLookup -> Parser [Address]
+addressList charsets = address charsets `sepBy` char8 ','
 
-group :: Parser Address
-group = Group <$> displayName <* char8 ':' <*> mailboxList <* char8 ';' <* optionalCFWS
+group :: CharsetLookup -> Parser Address
+group charsets =
+  Group <$> (displayName charsets) <* char8 ':'
+        <*> mailboxList charsets <* char8 ';' <* optionalCFWS
 
-address :: Parser Address
-address = group <|> Single <$> mailbox
+address :: CharsetLookup -> Parser Address
+address charsets =
+  group charsets <|> Single <$> mailbox charsets
 
 -- §3.5.  Overall Message Syntax
 

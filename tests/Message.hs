@@ -84,7 +84,6 @@ maybeAp f n g = frequency [(n - 1, g), (1, f <$> g)]
 genMessage :: Gen MIMEMessage
 genMessage = oneof [ genTextPlain, genMultipart1, encapsulate <$> genMessage ]
 
-
 prop_messageRoundTrip :: Property
 prop_messageRoundTrip = forAll genMessage $ \msg ->
   parse (message mime) (renderMessage msg) == Right msg

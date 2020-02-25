@@ -125,7 +125,7 @@ import Data.Time.Clock (UTCTime)
 import Data.Time.Format (defaultTimeLocale, parseTimeM)
 
 import Data.RFC5322
-import Data.RFC5322.Internal
+import Data.RFC5322.Internal hiding (takeWhile1)
 import Data.MIME.Error
 import Data.MIME.Charset
 import Data.MIME.EncodedWord
@@ -808,13 +808,19 @@ headerSingleToList
 headerSingleToList f g k =
   headers . at k . iso (maybe [] f) (\l -> if null l then Nothing else Just (g l))
 
-headerFrom :: HasHeaders a => Lens' a [Mailbox]
-headerFrom = headerSingleToList (either (const []) id . parseOnly mailboxList) renderMailboxes "From"
+headerFrom :: HasHeaders a => CharsetLookup -> Lens' a [Mailbox]
+headerFrom charsets = headerSingleToList
+  (either (const []) id . parseOnly (mailboxList charsets))
+  renderMailboxes
+  "From"
 
-headerAddressList :: (HasHeaders a) => CI B.ByteString -> Lens' a [Address]
-headerAddressList = headerSingleToList (either (const []) id . parseOnly addressList) renderAddresses
+headerAddressList :: (HasHeaders a) => CI B.ByteString -> CharsetLookup -> Lens' a [Address]
+headerAddressList k charsets = headerSingleToList
+  (either (const []) id . parseOnly (addressList charsets))
+  renderAddresses
+  k
 
-headerTo, headerCC, headerBCC :: (HasHeaders a) => Lens' a [Address]
+headerTo, headerCC, headerBCC :: (HasHeaders a) => CharsetLookup -> Lens' a [Address]
 headerTo = headerAddressList "To"
 headerCC = headerAddressList "Cc"
 headerBCC = headerAddressList "Bcc"

@@ -19,11 +19,13 @@ module Data.RFC5322.Internal
   , optionalCFWS
   , crlf
   , vchar
+  , word
   , quotedString
-  , phrase
   , dotAtom
   , localPart
   , domainLiteral
+  , CharParsing(..)
+  , SM
 
   -- ** Helpers for building parsers
   , isAtext
@@ -35,6 +37,7 @@ module Data.RFC5322.Internal
   , (<<>>)
   , foldMany
   , foldMany1
+  , foldMany1Sep
 
   -- * General parsers and combinators
   , skipTill
@@ -202,9 +205,6 @@ atom = optionalCFWS *> foldMany1 (singleton . toChar <$> atext) <* optionalCFWS
 
 word :: (Alternative (f s), CharParsing f s a, SM s) => (f s) s
 word = atom <|> quotedString
-
-phrase :: (Alternative (f s), CharParsing f s a, SM s) => (f s) s
-phrase = foldMany1Sep (singleton ' ') word
 
 dotAtomText :: (Alternative (f s), CharParsing f s a) => (f s) (NonEmpty s)
 dotAtomText = fromList <$> (takeWhile1 isAtext `A.sepBy1` char '.')

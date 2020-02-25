@@ -54,16 +54,16 @@ testFromToCcBccOptics = testGroup "headerFrom/To/Cc/Bcc tests" $
     bob = Mailbox Nothing (AddrSpec "bob" (DomainDotAtom ("example" :| ["com"])))
     carol = Mailbox Nothing (AddrSpec "carol" (DomainDotAtom ("example" :| ["com"])))
     msg = createTextPlainMessage "hi"
-    fromAlice = set headerFrom [alice] msg
-    fromAliceToBob = set headerTo [Single bob] fromAlice
-    fromAliceToCarolAndBob = over headerTo (Single carol :) fromAliceToBob
+    fromAlice = set (headerFrom defaultCharsets) [alice] msg
+    fromAliceToBob = set (headerTo defaultCharsets) [Single bob] fromAlice
+    fromAliceToCarolAndBob = over (headerTo defaultCharsets) (Single carol :) fromAliceToBob
   in
-    [ testCase "From empty" $ view headerFrom msg @?= []
-    , testCase "To empty" $ view headerTo msg @?= []
-    , testCase "set From alice" $ view headerFrom fromAlice @?= [alice]
-    , testCase "set To bob" $ view headerTo fromAliceToBob @?= [Single bob]
-    , testCase "add To carol" $ view headerTo fromAliceToCarolAndBob @?= [Single carol, Single bob]
-    , testCase "removing header" $ has (header "From") (set headerFrom [] fromAlice) @?= False
+    [ testCase "From empty" $ view (headerFrom defaultCharsets) msg @?= []
+    , testCase "To empty" $ view (headerTo defaultCharsets) msg @?= []
+    , testCase "set From alice" $ view (headerFrom defaultCharsets) fromAlice @?= [alice]
+    , testCase "set To bob" $ view (headerTo defaultCharsets) fromAliceToBob @?= [Single bob]
+    , testCase "add To carol" $ view (headerTo defaultCharsets) fromAliceToCarolAndBob @?= [Single carol, Single bob]
+    , testCase "removing header" $ has (header "From") (set (headerFrom defaultCharsets) [] fromAlice) @?= False
     ]
 
 rendersFieldsSuccessfully :: TestTree
@@ -180,7 +180,7 @@ parsesTextMailboxesSuccessfully :: TestTree
 parsesTextMailboxesSuccessfully =
     testGroup "parsing mailboxes (text)" $
     (\(desc,f,input) ->
-          testCase desc $ f (parseOnly mailbox input)) <$>
+          testCase desc $ f (parseOnly (mailbox defaultCharsets) input)) <$>
     mailboxFixtures
 
 addresses :: IsString s => [(String, Either String Address -> Assertion, s)]
@@ -203,7 +203,7 @@ addresses =
 parsesAddressesSuccessfully :: TestTree
 parsesAddressesSuccessfully =
     testGroup "parsing addresses" $
-    (\(desc,f,input) -> testCase desc $ f (parseOnly address input))
+    (\(desc,f,input) -> testCase desc $ f (parseOnly (address defaultCharsets) input))
     <$> addresses
 
 parsesTextAddressesSuccessfully :: TestTree

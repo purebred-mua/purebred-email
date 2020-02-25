@@ -77,6 +77,12 @@ mailbox :: Parser Mailbox
 mailbox = Mailbox <$> optional displayName <*> angleAddr
           <|> Mailbox Nothing <$> addressSpec
 
+-- | Version of 'phrase' that does not process encoded-word
+-- (we are parsing Text so will assume that the input does not
+-- contain encoded words.  TODO this is probably wrong :)
+phrase :: Parser T.Text
+phrase = foldMany1Sep (singleton ' ') word
+
 displayName :: Parser T.Text
 displayName = phrase
 

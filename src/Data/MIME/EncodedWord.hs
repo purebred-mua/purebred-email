@@ -9,11 +9,13 @@
 -}
 module Data.MIME.EncodedWord
   (
-    decodeEncodedWords
+    decodeEncodedWord
+  , decodeEncodedWords
+  , EncodedWord
+  , encodedWord
   ) where
 
 import Control.Applicative ((<|>), liftA2, optional)
-import Data.Bifunctor (first)
 import Data.Semigroup ((<>))
 
 import Control.Lens (to, clonePrism, review, view)
@@ -25,9 +27,10 @@ import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
 
 import Data.MIME.Charset
+import Data.MIME.Error (EncodingError)
 import Data.MIME.TransferEncoding
 import Data.MIME.QuotedPrintable
-import Data.RFC5322.Internal
+import Data.RFC5322.Internal (ci, takeTillString)
 
 data EncodedWord = EncodedWord
   { _encodedWordCharset :: CI.CI B.ByteString
@@ -126,21 +129,19 @@ transferEncodeEncodedWord (TransferDecodedEncodedWord charset lang s) =
 --
 decodeEncodedWords :: CharsetLookup -> B.ByteString -> T.Text
 decodeEncodedWords charsets s =
-  either (const $ decodeLenient s) merge $ fmap (g . f) <$> parseOnly tokens s
+  either (const (decodeLenient s)) (foldMap conv) (parseOnly tokens s)
   where
-    -- parse the ByteString into a series of tokens
-    -- of either raw ASCII text, or EncodedWords
+    tokens :: Parser [Either B.ByteString EncodedWord]
     tokens = liftA2 (:) (Left <$> takeTillString "=?") more
           <|> ((:[]) . Left <$> takeByteString)
     more = liftA2 (:) (Right <$> encodedWord <|> pure (Left "=?")) tokens
+    conv = either decodeLenient (decodeEncodedWord charsets)
 
-    f (Left t) = Left t
-    f (Right w) = first
-      (const $ serialiseEncodedWord w :: TransferEncodingError -> B.ByteString)
-      (view transferDecoded w)
-    g (Left t) = Left t
-    g (Right w) = first
-      (const $ serialiseEncodedWord $ transferEncodeEncodedWord w :: CharsetError -> B.ByteString)
-      (view (charsetDecoded charsets) w)
-
-    merge = foldMap (either decodeLenient id)
+-- | Decode an 'EncodedWord'.  If transfer or charset decoding fails,
+-- returns the serialised encoded word.
+decodeEncodedWord :: CharsetLookup -> EncodedWord -> T.Text
+decodeEncodedWord charsets w =
+  either
+    (decodeLenient . const (serialiseEncodedWord w) :: EncodingError -> T.Text)
+    id
+    (view transferDecoded w >>= view (charsetDecoded charsets))
