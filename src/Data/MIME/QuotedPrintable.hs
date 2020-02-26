@@ -37,12 +37,11 @@ data QuotedPrintableMode = QuotedPrintable | Q
 -- | Whether it is required to encode a character
 -- (where that character does not precede EOL).
 encodingRequiredNonEOL :: QuotedPrintableMode -> Word8 -> Bool
-encodingRequiredNonEOL mode c = not (
-  (c >= 33 && c <= 60)
-  || (c >= 62 && c <= 126)
-  || c == 9
-  || c == 32
-  ) || (mode == Q && c == 95 {- underscore -})
+encodingRequiredNonEOL mode c =
+  (c < 32 {- ' ' -} && c /= 9 {- \t -})
+  || c == 61 {- = -}
+  || c >= 127
+  || mode == Q && (c == 95 {- _ -} || c == 9 {- \t -})
 
 
 -- | Whether it is required to encode a character
