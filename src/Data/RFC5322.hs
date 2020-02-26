@@ -6,6 +6,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TupleSections #-}
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeFamilies #-}
 
@@ -130,6 +131,7 @@ import qualified Data.ByteString as B
 import qualified Data.ByteString.Lazy as L
 import qualified Data.ByteString.Char8 as Char8
 import qualified Data.ByteString.Builder as Builder
+import qualified Data.ByteString.Builder.Prim as Prim
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
 import Data.Time.Clock (UTCTime)
@@ -138,12 +140,14 @@ import Data.Time.Format (defaultTimeLocale, formatTime)
 import Data.RFC5322.Internal
   ( CI, ci, original
   , (<<>>), foldMany, foldMany1Sep
-  , optionalCFWS, word, wsp, isWsp, vchar, optionalFWS, crlf
+  , fromChar, isAtext, isQtext, isVchar, isWsp
+  , optionalCFWS, word, wsp, vchar, optionalFWS, crlf
   , domainLiteral, dotAtom, localPart, quotedString
   )
 import Data.RFC5322.Address.Types
-import Data.MIME.Charset (CharsetLookup, decodeLenient)
-import Data.MIME.EncodedWord (encodedWord, decodeEncodedWord)
+import Data.MIME.Charset
+import Data.MIME.EncodedWord (encodedWord, decodeEncodedWord, buildEncodedWord)
+import Data.MIME.TransferEncoding (transferEncode)
 
 type Header = (CI B.ByteString, B.ByteString)
 newtype Headers = Headers [Header]
@@ -250,16 +254,63 @@ renderRFC5422Date = Char8.pack . formatTime defaultTimeLocale rfc5422DateTimeFor
 -- §3.4 Address Specification
 buildMailbox :: Mailbox -> Builder.Builder
 buildMailbox (Mailbox n a) =
-  maybe a' (\n' -> renderDisplayName n' <> "<" <> a' <> ">") n
+  maybe a' (\n' -> buildPhrase n' <> " <" <> a' <> ">") n
   where
     a' = buildAddressSpec a
 
-renderDisplayName :: T.Text -> Builder.Builder
-renderDisplayName x =
-    mconcat
-        [ "\""
-        , Builder.byteString (T.encodeUtf8 x)
-        , "\" "]
+-- Encode a phrase.
+--
+-- * Empty string is special case; must be in quotes
+-- * If valid as an atom, use as-is (ideally, but we don't do this yet)
+-- * If it can be in a quoted-string, do so.
+-- * Otherwise make it an encoded-word
+--
+buildPhrase :: T.Text -> Builder.Builder
+buildPhrase "" = "\"\""
+buildPhrase s =
+  case enc s of
+    PhraseAtom -> T.encodeUtf8Builder s
+    PhraseQuotedString _ -> "\"" <> T.encodeUtf8BuilderEscaped escPrim s <> "\""
+    PhraseEncodedWord -> buildEncodedWord . transferEncode . charsetEncode $ s
+  where
+    enc = T.foldr (\c z -> encChar c <> z) mempty
+    encChar c
+      | isAtext c = PhraseAtom
+      | isQtext c = PhraseQuotedString 0
+      | isVchar c || c == ' ' = PhraseQuotedString 1
+      | otherwise = PhraseEncodedWord
+
+    -- FIXME: this probably doesn't handle consecutive SPACE properly
+    -- due to FWS:
+    --
+    --    quoted-string   =   [CFWS]
+    --                        DQUOTE *([FWS] qcontent) [FWS] DQUOTE
+    --                        [CFWS]
+    --
+    -- Do not be surprised if the roundtrip property fails
+    --
+    escPrim = Prim.condB (\c -> isQtext c || c == 32)
+      (Prim.liftFixedToBounded Prim.word8)
+      (Prim.liftFixedToBounded $ (fromChar '\\',) Prim.>$< Prim.word8 Prim.>*< Prim.word8)
+
+-- | Data type used to compute escaping requirement of a Text 'phrase'
+-- 'PhraseQuotedString' records the number of additional characters
+-- needed for escapes (backslash).  It does not include the surrounding
+-- DQUOTE characters.
+--
+data PhraseEscapeRequirement = PhraseAtom | PhraseQuotedString Int | PhraseEncodedWord
+
+instance Semigroup PhraseEscapeRequirement where
+  PhraseEncodedWord <> _ = PhraseEncodedWord
+  PhraseAtom <> a = a
+  PhraseQuotedString n <> PhraseQuotedString m = PhraseQuotedString (n + m)
+  a <> PhraseAtom = a
+  _ <> PhraseEncodedWord = PhraseEncodedWord
+
+instance Monoid PhraseEscapeRequirement where
+  mempty = PhraseAtom
+
+
 
 renderMailboxes :: [Mailbox] -> B.ByteString
 renderMailboxes = L.toStrict . Builder.toLazyByteString . buildMailboxes

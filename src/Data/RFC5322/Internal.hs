@@ -24,6 +24,7 @@ module Data.RFC5322.Internal
   , dotAtom
   , localPart
   , domainLiteral
+  , IsChar(..)
   , CharParsing(..)
   , SM
 

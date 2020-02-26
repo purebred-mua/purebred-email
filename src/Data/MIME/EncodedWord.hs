@@ -13,7 +13,9 @@ module Data.MIME.EncodedWord
   , decodeEncodedWords
   , EncodedWord
   , encodedWord
+  , buildEncodedWord
   , encodeEncodedWords
+  , chooseEncodedWordEncoding
   ) where
 
 import Control.Applicative ((<|>), liftA2, optional)
@@ -25,6 +27,8 @@ import Data.Attoparsec.ByteString
 import Data.Attoparsec.ByteString.Char8 (char8)
 import Data.ByteString.Lens (bytes)
 import qualified Data.ByteString as B
+import qualified Data.ByteString.Lazy as L
+import qualified Data.ByteString.Builder as Builder
 import qualified Data.CaseInsensitive as CI
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
@@ -94,11 +98,15 @@ encodedWord =
     encodedText = takeWhile1 (\c -> (c >= 33 && c < 63) || (c > 63 && c <= 127))
 
 serialiseEncodedWord :: EncodedWord -> B.ByteString
-serialiseEncodedWord (EncodedWord charset lang enc s) =
-  "=?" <> CI.original charset
-  <> maybe "" (\l -> "*" <> CI.original l) lang
-  <> "?" <> CI.original enc <> 
-  "?" <> s <> "?="
+serialiseEncodedWord = L.toStrict . Builder.toLazyByteString . buildEncodedWord
+
+buildEncodedWord :: EncodedWord -> Builder.Builder
+buildEncodedWord (EncodedWord charset lang enc s) =
+  "=?" <> Builder.byteString (CI.original charset)
+  <> maybe "" (\l -> "*" <> Builder.byteString (CI.original l)) lang
+  <> "?" <> Builder.byteString (CI.original enc)
+  <> "?" <> Builder.byteString s <> "?="
+
 
 transferEncodeEncodedWord :: TransferDecodedEncodedWord -> EncodedWord
 transferEncodeEncodedWord (TransferDecodedEncodedWord charset lang s) =
