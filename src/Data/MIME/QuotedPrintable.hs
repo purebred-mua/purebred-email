@@ -41,7 +41,7 @@ encodingRequiredNonEOL mode c =
   (c < 32 {- ' ' -} && c /= 9 {- \t -})
   || c == 61 {- = -}
   || c >= 127
-  || mode == Q && (c == 95 {- _ -} || c == 9 {- \t -})
+  || mode == Q && (c == 95 {- _ -} || c == 9 {- \t -} || c == 63 {- ? -})
 
 
 -- | Whether it is required to encode a character
