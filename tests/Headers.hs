@@ -79,7 +79,7 @@ rendersFieldsSuccessfully =
           , "Subject: Re: Simple Subject\r\n")
         , ( "continuous line"
           , ("Subject", "ThisisalongcontiniousLineWithoutAnyWhiteSpaceandNowSomeGarbageASDFASDFASDFASDF")
-          , "Subject: \r\n ThisisalongcontiniousLineWithoutAnyWhiteSpaceandNowSomeGarbageASDFASDFASDFASDF\r\n")
+          , "Subject: ThisisalongcontiniousLineWithoutAnyWhiteSpaceandNowSomeGarbageASDFASDFASDFASDF\r\n")
         , ( "folding"
           , ( "Received"
             , "from adsl-33-138-215-182-129-129.test.example ([XX.XX.XXX.XXX]) by this.is.another.hostname.example with esmtp (Exim 4.24) id 1Akwaj-00035l-NT for me@test.example; Sun, 25 2004 21:35:09 -0500")
