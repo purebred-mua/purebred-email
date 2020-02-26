@@ -105,6 +105,11 @@ encodeQuotedPrintable' mode poke' mkResult dptr (B.PS sfp soff slen) =
       mapChar 32 {- ' ' -} | mode == Q = 95 {- _ -}
       mapChar c = c
 
+      -- Do not wrap lines in Q mode.  This is not correct,
+      -- but encoded-word wrapping needs separate encoded-words
+      -- including the leading =?... and trailing ?=
+      wrapLimit = if mode == Q then maxBound else 76
+
       fill col !dp !sp
         | sp >= slimit = pure $ dp `minusPtr` dptr
         | otherwise = do
@@ -121,7 +126,7 @@ encodeQuotedPrintable' mode poke' mkResult dptr (B.PS sfp soff slen) =
                     || encodingRequiredNonEOL mode c
                   bytesNeeded = bool 1 3 encodingRequired
                   c' = mapChar c
-                case (col + bytesNeeded >= 76, encodingRequired) of
+                case (col + bytesNeeded >= wrapLimit, encodingRequired) of
                   (False, False) ->
                     poke' dp c'
                     *> fill (col + bytesNeeded) (dp `plusPtr` bytesNeeded) (sp `plusPtr` 1)
