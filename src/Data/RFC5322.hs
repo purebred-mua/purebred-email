@@ -402,7 +402,7 @@ buildField (k,v) =
 foldUnstructured :: Int -> B.ByteString -> B.ByteString
 foldUnstructured i b =
     let xs = chunk (i + 2) (Char8.words b) [] []
-    in B.intercalate "\r\n " xs
+    in B.intercalate "\r\n " (filter (not . B.null) xs)
 
 chunk :: Int -> [B.ByteString] -> [B.ByteString] -> [B.ByteString] -> [B.ByteString]
 chunk _ [] xs result = result <> [Char8.unwords xs]
