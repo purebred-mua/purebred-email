@@ -84,6 +84,7 @@ encodeQuotedPrintable' mode poke' mkResult dptr (B.PS sfp soff slen) =
       -- is there a crlf at this location?
       crlf :: Ptr Word8 -> IO Bool
       crlf ptr
+        | mode == Q = pure False  -- always encode CRLF in 'Q' mode
         | ptr `plusPtr` 1 >= slimit = pure False
         | otherwise = do
           c1 <- peek ptr
