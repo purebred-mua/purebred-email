@@ -1,5 +1,4 @@
 import Test.Tasty
-import Test.Tasty.QuickCheck
 
 import ContentTransferEncodings as CTE
 import EncodedWord

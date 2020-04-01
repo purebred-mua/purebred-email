@@ -16,25 +16,28 @@
 
 {-# LANGUAGE NoMonomorphismRestriction #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE TypeFamilies #-}
 
 {- |
 
-Generators and instances for messages and parts thereof.
+Generators and properties for messages and parts thereof.
 
 -}
 module Message where
 
-import Data.Char (isAscii, isPrint)
+import Data.Char (isPrint)
 import Data.Foldable (fold)
-import Data.List.NonEmpty (NonEmpty, fromList, intersperse)
+import Data.List.NonEmpty (NonEmpty, intersperse)
 
 import Control.Lens (set, view)
-import qualified Data.ByteString.Char8 as B
+import qualified Data.ByteString as B
 import qualified Data.Text as T
 
-import Test.QuickCheck.Instances ()
 import Test.Tasty
-import Test.Tasty.QuickCheck
+import Test.Tasty.Hedgehog
+import Hedgehog
+import qualified Hedgehog.Gen as Gen
+import qualified Hedgehog.Range as Range
 
 import Data.MIME
 import Data.RFC5322.Internal (isAtext)
@@ -42,74 +45,71 @@ import Data.RFC5322.Internal (isAtext)
 tests :: TestTree
 tests = testGroup "message tests"
   [ testProperty "message round trip" prop_messageRoundTrip
-  , testProperty "message round trip with From header" prop_messageFromRoundTrip
+  , localOption (HedgehogTestLimit (Just 10000)) $
+      testProperty "message round trip with From header" prop_messageFromRoundTrip
   ]
 
-genPrintAsciiChar :: Gen Char
-genPrintAsciiChar = arbitraryPrintableChar `suchThat` isAscii
+printableAsciiChar, printableUnicodeChar, unicodeCharAsciiBias :: Gen Char
+printableAsciiChar = Gen.filter isPrint Gen.ascii
+printableUnicodeChar = Gen.filter isPrint Gen.unicode
 
-genAscii1 :: Gen T.Text
-genAscii1 = T.pack <$> listOf1 genPrintAsciiChar
+-- | We need a generator that has ascii bias to make sequences
+-- like "\r\n" more likely.
+unicodeCharAsciiBias = Gen.frequency [(3, Gen.ascii), (1, Gen.unicode)]
 
-genText1 :: Gen T.Text
-genText1 = T.pack <$> listOf1 arbitraryPrintableChar
+asciiText1, unicodeText1 :: Gen T.Text
+asciiText1 = Gen.text (Range.linear 1 100) printableAsciiChar
+unicodeText1 = Gen.text (Range.linear 1 100) printableUnicodeChar
 
-genTextPlain :: Gen MIMEMessage
-genTextPlain = createTextPlainMessage <$> oneof [genAscii1, genText1]
-
--- Generate a 50 character multipart boundary.  These MUST be unique
--- for all (nested) multipart messages.  Hopefully 50 chars is
--- enough to have a low-enough probability of collision.
-genBoundary :: Gen B.ByteString
-genBoundary = B.pack <$> vectorOf 50 genPrintAsciiChar
-
--- Multipart message with at least one part.
-genMultipart1 = depths >>= go
+genTextPlain, genMultipart, genMessage :: Gen MIMEMessage
+genTextPlain = createTextPlainMessage <$> Gen.choice [asciiText1, unicodeText1]
+genMultipart = depths >>= go
   where
-  go :: Int -> Gen MIMEMessage
+  -- Generate a 50 character multipart boundary.  These MUST be unique
+  -- for all (nested) multipart messages.  Assume negligible probability
+  -- of collision.
+  genBoundary = Gen.utf8 (Range.singleton 50) printableAsciiChar
+
   go 0 = genTextPlain
-  go n = do
-    len <- choose (1, 10) -- up to 10 subparts, minimum of 1
-    createMultipartMixedMessage
+  go n = createMultipartMixedMessage
       <$> genBoundary
-      <*> ( fromList <$>
+      <*> ( Gen.nonEmpty (Range.linear 1 10) $
             -- 75% plain, 25% nested multipart
-            vectorOf len (maybeAp encapsulate 5 $ frequency [(3, genTextPlain), (1, go (n - 1))])
+            maybeAp encapsulate 5 $ Gen.frequency [(3, genTextPlain), (1, go (n - 1))]
           )
 
   -- max depth of 4
-  depths = frequency
+  depths :: Gen Int
+  depths = Gen.frequency
     [ (1, pure 1)
     , (5, pure 2)
     , (3, pure 3)
     , (1, pure 4)
     ]
 
--- | Apply the function to the generated value with probability 1-in-/n/.
-maybeAp :: (a -> a) -> Int -> Gen a -> Gen a
-maybeAp f n g = frequency [(n - 1, g), (1, f <$> g)]
+  -- Apply the function to the generated value with probability 1-in-/n/.
+  maybeAp f n g = Gen.frequency [(n - 1, g), (1, f <$> g)]
 
-genMessage :: Gen MIMEMessage
-genMessage = oneof [ genTextPlain, genMultipart1, encapsulate <$> genMessage ]
+genMessage = Gen.choice [ genTextPlain, genMultipart, encapsulate <$> genMessage ]
 
 prop_messageRoundTrip :: Property
-prop_messageRoundTrip = forAll genMessage $ \msg ->
-  parse (message mime) (renderMessage msg) == Right msg
+prop_messageRoundTrip = property $ do
+  msg <- forAll genMessage
+  parse (message mime) (renderMessage msg) === Right msg
 
 prop_messageFromRoundTrip :: Property
-prop_messageFromRoundTrip = forAll genMailbox $ \mailbox ->
+prop_messageFromRoundTrip = property $ do
+  from <- forAll genMailbox
   let
     l = headerFrom defaultCharsets
-    msg = set l [mailbox] (createTextPlainMessage "Hello")
-  in
-    (view l <$> parse (message mime) (renderMessage msg))
-    == Right [mailbox]
+    msg = set l [from] (createTextPlainMessage "Hello")
+  (view l <$> parse (message mime) (renderMessage msg)) === Right [from]
 
 genDomain :: Gen Domain
 genDomain = DomainDotAtom <$> genDotAtom -- TODO domain literal
 
 genDotAtom :: Gen (NonEmpty B.ByteString)
-genDotAtom = fromList <$> listOf1 (B.pack <$> listOf1 (arbitrary `suchThat` isAtext))
+genDotAtom = Gen.nonEmpty (Range.linear 1 5) (Gen.utf8 (Range.linear 1 20) (Gen.filter isAtext Gen.ascii))
 
 genLocalPart :: Gen B.ByteString
 genLocalPart = fold . intersperse "." <$> genDotAtom
@@ -118,4 +118,7 @@ genAddrSpec :: Gen AddrSpec
 genAddrSpec = AddrSpec <$> genLocalPart <*> genDomain
 
 genMailbox :: Gen Mailbox
-genMailbox = Mailbox <$> arbitrary <*> genAddrSpec
+genMailbox =
+  Mailbox
+  <$> Gen.maybe (Gen.text (Range.linear 0 100) unicodeCharAsciiBias)
+  <*> genAddrSpec
