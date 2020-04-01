@@ -164,14 +164,13 @@ decodeEncodedWord charsets w =
 --
 -- Currently turns the whole text into a single encoded word, if necessary.
 encodeEncodedWords :: T.Text -> B.ByteString
-encodeEncodedWords s =
-  maybe
-  utf8
-  (uncurry ((serialiseEncodedWord .) . (. cteOf) . EncodedWord "utf-8" Nothing))
-  (chooseEncodedWordEncoding utf8)
+encodeEncodedWords t = maybe utf8 (const ew) (chooseEncodedWordEncoding utf8)
   where
-    cteOf cte = review (clonePrism cte) utf8
-    utf8 = T.encodeUtf8 s
+    ew = B.intercalate " " . fmap encOrNot . B.split 32 $ utf8
+    encOrNot s = maybe s (g s) (chooseEncodedWordEncoding s)
+    g s (enc, p) = serialiseEncodedWord $
+      EncodedWord "utf-8" Nothing enc (review (clonePrism p) s)
+    utf8 = T.encodeUtf8 t
 
 chooseEncodedWordEncoding :: B.ByteString -> Maybe (TransferEncodingName, TransferEncoding)
 chooseEncodedWordEncoding s
