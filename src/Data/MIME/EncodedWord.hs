@@ -20,6 +20,7 @@ module Data.MIME.EncodedWord
 
 import Control.Applicative ((<|>), liftA2, optional)
 import Data.Semigroup ((<>))
+import Data.Maybe (fromMaybe)
 import Data.Monoid (Sum(Sum), Any(Any))
 
 import Control.Lens (to, clonePrism, review, view, foldMapOf)
@@ -110,7 +111,8 @@ buildEncodedWord (EncodedWord charset lang enc s) =
 
 transferEncodeEncodedWord :: TransferDecodedEncodedWord -> EncodedWord
 transferEncodeEncodedWord (TransferDecodedEncodedWord charset lang s) =
-  EncodedWord charset lang "Q" (review (clonePrism q) s)
+  let (enc, p) = fromMaybe ("Q", q) (chooseEncodedWordEncoding s)
+  in EncodedWord charset lang enc (review (clonePrism p) s)
 
 -- | RFC 2047 and RFC 2231 define the /encoded-words/ mechanism for
 -- embedding non-ASCII data in headers.  This function locates
