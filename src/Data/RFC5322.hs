@@ -339,7 +339,7 @@ message f = fields >>= \hdrs -> Message hdrs <$> case f hdrs of
   OptionalBody (b, a) -> optional crlf >>= maybe (pure a) (const b)
   NoBody b -> pure b
 
-type family MessageContext a = s
+type family MessageContext a
 
 
 fields :: Parser Headers
