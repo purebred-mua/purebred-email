@@ -308,7 +308,7 @@ address = group <|> Single <$> mailbox
 message :: (Headers -> Parser a) -> Parser (Message (MessageContext a) a)
 message f = fields >>= \hdrs -> Message hdrs <$> (crlf *> f hdrs)
 
-type family MessageContext a = s
+type family MessageContext a
 
 
 fields :: Parser Headers
