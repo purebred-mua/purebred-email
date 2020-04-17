@@ -136,7 +136,7 @@ import Data.MIME.TransferEncoding
 
 {- $create
 
-Create an inline, plain text message and render it:
+Create an __inline, plain text message__ and __render__ it:
 
 @
 λ> import Data.MIME
@@ -151,7 +151,7 @@ Content-Type: text/plain; charset=us-ascii
 Hello, world!
 @
 
-Set the @From@ and @To@ headers:
+Set the __@From@__ and __@To@__ headers:
 
 @
 λ> alice = Mailbox Nothing (AddrSpec "alice" (DomainDotAtom ("example" :| ["com"])))
@@ -169,12 +169,12 @@ Hello, world!
 @
 
 The 'headerFrom', 'headerTo', 'headerCC' and 'headerBCC' lenses are the most
-convenient interface for reading and setting the sender and recipient
-addresses.  Note that you would usually not manually construct email addresses
+convenient interface for reading and setting the __sender and recipient addresses__.
+Note that you would usually not manually construct email addresses
 manually as was done above.  Instead you would usually read it from another
 email or configuration, or parse addresses from user input.
 
-The @Subject@ header is set via 'headerSubject'.  Other single-valued headers
+The __@Subject@__ header is set via 'headerSubject'.  __Other single-valued headers__
 can be set via 'headerText'.
 
 @
@@ -197,7 +197,7 @@ Content-Type: text/plain; charset=us-ascii
 Hello, world!
 @
 
-Create a multipart message with attachment:
+Create a __multipart message with attachment__:
 
 @
 λ> attachment = 'createAttachment' "application/json" (Just "data.json") "{\"foo\":42}"
@@ -230,7 +230,7 @@ IO handle, 'buildMessage' is more efficient than 'renderMessage'.
 
 {- $parse
 
-Most often you will parse a message like this:
+Most often you will __parse a message__ like this:
 
 @
 λ> parsedMessage = 'parse' ('message' 'mime') s2
@@ -251,7 +251,7 @@ function is the right one to use.
 {- $inspect
 
 Parsing an email is nice, but your normally want to get at the
-content inside.  One of the most important tasks is finding entities
+content inside.  One of the most important tasks is __finding entities__
 of interest, e.g. attachments, plain text or HTML bodies.  The
 'entities' optic is a fold over all /leaf/ entities in the message.
 That is, all the non-multipart bodies.  You can use 'filtered' to
@@ -280,7 +280,9 @@ Just "Hello, world!"
 @
 
 For __attachments__ you are normally interested in the binary data
-and possibly the filename (if specified).  In the following example we retrieve all attachments, and their filenames, as a list of tuples (although there is only one in the message).  Note that
+and possibly the filename (if specified).  In the following example
+we retrieve all attachments, and their filenames, as a list of
+tuples (although there is only one in the message).  Note that
 
 Get the (optional) filenames and (decoded) body of all attachments,
 as a list of tuples.  The 'attachments' optic selects non-multipart
