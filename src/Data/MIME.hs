@@ -93,6 +93,8 @@ module Data.MIME
   , headerCC
   , headerBCC
   , headerDate
+  , headerSubject
+  , headerText
   , replyHeaderReferences
 
   -- * Re-exports
@@ -140,7 +142,7 @@ Create an inline, plain text message and render it:
 λ> import Data.MIME
 λ> msg = 'createTextPlainMessage' "Hello, world!"
 λ> s = 'renderMessage' msg
-λ> B.putStrLn s
+λ> L.putStrLn s
 MIME-Version: 1.0
 Content-Transfer-Encoding: 7bit
 Content-Disposition: inline
@@ -154,8 +156,8 @@ Set the @From@ and @To@ headers:
 @
 λ> alice = Mailbox Nothing (AddrSpec "alice" (DomainDotAtom ("example" :| ["com"])))
 λ> bob = Mailbox Nothing (AddrSpec "bob" (DomainDotAtom ("example" :| ["net"])))
-λ> msgFromAliceToBob = set 'headerFrom' [alice] . set 'headerTo' [Single bob] $ msg
-λ> B.putStrLn (renderMessage msgFromAliceToBob)
+λ> msgFromAliceToBob = set ('headerFrom' 'defaultCharsets' [alice] . set ('headerTo' defaultCharsets) [Single bob] $ msg
+λ> L.putStrLn (renderMessage msgFromAliceToBob)
 MIME-Version: 1.0
 From: alice@example.com
 To: bob@example.net
@@ -172,13 +174,36 @@ addresses.  Note that you would usually not manually construct email addresses
 manually as was done above.  Instead you would usually read it from another
 email or configuration, or parse addresses from user input.
 
+The @Subject@ header is set via 'headerSubject'.  Other single-valued headers
+can be set via 'headerText'.
+
+@
+λ> :{
+| L.putStrLn . renderMessage $
+|   set ('headerText' defaultCharsets "Comments") (Just "와")
+|   . set ('headerSubject' defaultCharsets) (Just "Hi from Alice")
+|   $ msgFromAliceToBob
+| :}
+
+MIME-Version: 1.0
+Comments: =?utf-8?B?7JmA?=
+Subject: Hi from Alice
+From: alice@example.com
+To: bob@example.net
+Content-Transfer-Encoding: 7bit
+Content-Disposition: inline
+Content-Type: text/plain; charset=us-ascii
+
+Hello, world!
+@
+
 Create a multipart message with attachment:
 
 @
 λ> attachment = 'createAttachment' "application/json" (Just "data.json") "{\"foo\":42}"
 λ> msg2 = 'createMultipartMixedMessage' "boundary" [msg, attachment]
 λ> s2 = 'renderMessage' msg2
-λ> B.putStrLn s2
+λ> L.putStrLn s2
 MIME-Version: 1.0
 Content-Type: multipart/mixed; boundary=boundary
 
@@ -297,7 +322,7 @@ In Australia we say "Hello world" upside down:
 
 @
 λ> msg3 = createTextPlainMessage "ɥǝןןo ʍoɹןp"
-λ> B.putStrLn $ renderMessage msg3
+λ> L.putStrLn $ renderMessage msg3
 MIME-Version: 1.0
 Content-Transfer-Encoding: base64
 Content-Disposition: inline
@@ -831,6 +856,22 @@ headerDate = headers . at "Date" . iso (parseDate =<<) (fmap renderRFC5422Date)
     parseDate =
         parseTimeM True defaultTimeLocale rfc5422DateTimeFormatLax . C8.unpack
 
+-- | Single-valued header with @Text@ value via encoded-words.
+-- The conversion to/from Text is total (encoded-words that failed to be
+-- decoded are passed through unchanged).  Therefore @Nothing@ means that
+-- the header was not present.
+--
+-- This function is suitable for the @Subject@ header.
+--
+headerText :: (HasHeaders a) => CharsetLookup -> CI B.ByteString -> Lens' a (Maybe T.Text)
+headerText charsets k =
+  headers . at k . iso (fmap (decodeEncodedWords charsets)) (fmap encodeEncodedWords)
+
+-- | Subject header.  See 'headerText' for details of conversion to @Text@.
+headerSubject :: (HasHeaders a) => CharsetLookup -> Lens' a (Maybe T.Text)
+headerSubject charsets = headerText charsets "Subject"
+
+
 -- | Returns a space delimited `B.ByteString` with values from identification
 -- fields from the parents message `Headers`. Rules to gather the values are in
 -- accordance to RFC5322 - 3.6.4 as follows sorted by priority (first has
@@ -854,21 +895,6 @@ replyHeaderReferences = (.) headers $ to $ \hdrs ->
 -- | Create a mixed `MIMEMessage` with an inline text/plain part and multiple
 -- `attachments`
 --
--- Additional headers can be set (e.g. @Cc@) by using `At` and `Ixed`, for
--- example:
---
--- @
--- λ> set (at "subject") (Just "Hey there") $ Headers []
--- Headers [("subject", "Hey there")]
--- @
---
--- You can also use the `Mailbox` instances:
---
--- @
--- λ> let address = Mailbox (Just "roman") (AddrSpec "roman" (DomainLiteral "192.168.1.1"))
--- λ> set (at "cc") (Just $ renderMailbox address) $ Headers []
--- Headers [("cc", "\\"roman\\" <roman@192.168.1.1>")]
--- @
 createMultipartMixedMessage
     :: B.ByteString -- ^ Boundary
     -> NonEmpty MIMEMessage -- ^ parts
