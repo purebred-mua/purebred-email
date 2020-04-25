@@ -16,7 +16,9 @@ module Data.MIME.Base64
 
 import Control.Lens (prism')
 import qualified Data.ByteString as B
+import qualified Data.ByteString.Lazy as L
 import qualified Data.ByteString.Base64 as B64
+import qualified Data.ByteString.Base64.Lazy as L64
 import Data.Word (Word8)
 
 import Data.MIME.Types (ContentTransferEncoding)
@@ -41,7 +43,11 @@ Notes about encoding requirements:
 
 -}
 contentTransferEncodeBase64 :: B.ByteString -> B.ByteString
-contentTransferEncodeBase64 = B64.joinWith "\r\n" 76 . B64.encode
+contentTransferEncodeBase64 = L.toStrict . wrap . L64.encode . L.fromStrict
+  where
+  wrap s = case L.splitAt 76 s of
+    ("", _) -> ""
+    (l, s') -> l <> "\r\n" <> wrap s'
 
 {-
 
