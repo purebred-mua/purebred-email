@@ -8,16 +8,16 @@ import Data.String (IsString)
 import Data.Semigroup ((<>))
 import Data.Word (Word8)
 
-import qualified Data.ByteString.Char8 as BC
 import qualified Data.ByteString as B
-import Data.ByteString.Lazy (toStrict)
+import qualified Data.ByteString.Lazy as L
+import qualified Data.ByteString.Lazy.Char8 as L8
 import Data.Attoparsec.ByteString.Char8 (parseOnly)
 import qualified Data.Attoparsec.Text as AText (parseOnly)
 import qualified Data.ByteString.Builder as Builder
 import qualified Data.CaseInsensitive as CI
 import Data.Either (isLeft)
 
-import Test.Tasty (TestTree, testGroup)
+import Test.Tasty
 import Test.Tasty.HUnit (assertBool, (@=?), (@?=), testCase, Assertion)
 import Test.Tasty.QuickCheck
 import Test.QuickCheck.Instances ()
@@ -26,8 +26,8 @@ import Data.MIME
 import qualified Data.RFC5322.Address.Text as AddressText
   (mailbox, address, renderAddress)
 
-renderField :: (CI.CI B.ByteString, B.ByteString) -> B.ByteString
-renderField = toStrict . Builder.toLazyByteString . buildField
+renderField :: (CI.CI B.ByteString, B.ByteString) -> L.ByteString
+renderField = Builder.toLazyByteString . buildField
 
 unittests :: TestTree
 unittests = testGroup "Headers"
@@ -345,15 +345,21 @@ vchar c = c >= 33 && c <= 126
 genField :: Gen (CI.CI B.ByteString, B.ByteString)
 genField = (,) <$> (CI.mk <$> genFieldItem) <*> genFieldBody
 
-newtype MailHeaders = MailHeaders { unHeader :: (CI.CI B.ByteString, B.ByteString)}
-  deriving (Show)
+prop_renderHeadersRoundtrip :: Property
+prop_renderHeadersRoundtrip = forAll genField $ \kv ->
+  parse field (renderField kv) == Right kv
 
-instance Arbitrary MailHeaders where
-    arbitrary = MailHeaders <$> genField
+prop_foldedUnstructuredLimited :: Property
+prop_foldedUnstructuredLimited = forAll genField $ \kv ->
+  all ((<= 78) . L.length) (crlfLines $ renderField kv)
 
-prop_renderHeadersRoundtrip :: MailHeaders -> Bool
-prop_renderHeadersRoundtrip h = parse field (renderField (unHeader h)) == Right (unHeader h)
-
-prop_foldedUnstructuredLimited :: MailHeaders -> Bool
-prop_foldedUnstructuredLimited h = let xs = BC.lines $ renderField (unHeader h)
-                                   in all (== True) ((\x -> B.length x <= 78) <$> xs)
+crlfLines :: L.ByteString -> [L.ByteString]
+crlfLines = go ""
+  where
+  go acc s =
+    let (h,t) = L8.span (/= '\r') s
+    in
+      case L.take 2 t of
+        ""      -> [acc <> h]
+        "\r\n"  -> acc <> h : go "" (L.drop 2 t)
+        _       -> go (acc <> h <> L.take 1 t) (L.drop 1 t)
