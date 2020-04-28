@@ -446,35 +446,36 @@ buildField (k,v) =
   let key = original k
   in
     Builder.byteString key
-    <> ": "
-    <> Builder.byteString (foldUnstructured (B.length key) v)
+    <> ":"
+    <> foldUnstructured v (B.length key + 1)
     <> "\r\n"
-
 
 -- | Render a field body with proper folding
 --
--- Algorithm:
--- * Break the string on white space
--- * Use a counter which indicates a new folding line if it exceeds 77 characters
--- * Whenever we create a new line, concatenate all words back with white space and push it into the result
--- * The result is a list of byte strings, which is concatenated with \r\n\s
+-- Folds on whitespace (and only whitespace).  Sequential whitespace
+-- chars are folded.  That's OK because the grammar says it is
+-- folding whitespace.
 --
--- Notes:
---  * First take at this, so possibly very inefficient
---  * No other delimiters (e.g. commas, full stops, etc) are considered for
---    folding other than whitespace
---  * Attaches an additional whitespace when joining
---
-foldUnstructured :: Int -> B.ByteString -> B.ByteString
-foldUnstructured i b =
-    let xs = chunk (i + 2) (Char8.words b) [] []
-    in B.intercalate "\r\n " (filter (not . B.null) xs)
-
-chunk :: Int -> [B.ByteString] -> [B.ByteString] -> [B.ByteString] -> [B.ByteString]
-chunk _ [] xs result = result <> [Char8.unwords xs]
-chunk max' (x:rest) xs result = if (max' + B.length x + 1) >= 77
-                                then result <> [Char8.unwords xs] <> chunk (B.length x + 1) rest [x] []
-                                else result <> chunk (max' + B.length x + 1) rest (xs <> [x]) result
+foldUnstructured :: B.ByteString -> Int -> Builder.Builder
+foldUnstructured s i = case Char8.words s of
+  [] -> mempty
+  (h:t) ->
+    -- Special case to prevent wrapping of first word;
+    -- see 6dbc04fb1863e845699b1cef50f4edaf1326bdae for info.
+    " " <> Builder.byteString h <> go t (i + 1 + B.length h)
+  where
+  limit = 76  -- could be 78, but this preserves old behaviour
+  go [] _ = mempty
+  go (chunk:chunks) col
+    | col + 1 + B.length chunk < limit =
+        -- there is room for the chunk
+        " " <> Builder.byteString chunk <> go chunks (col + 1 + B.length chunk)
+    | col <= 1 =
+        -- there isn't room for the chunk, but we are at the
+        -- beginning of the line so add it here anyway (otherwise
+        -- we will add "\r\n" and recurse forever
+        " " <> Builder.byteString chunk <> "\r\n" <> go chunks 0
+    | otherwise = "\r\n" <> go (chunk:chunks) 0  -- fold
 
 -- | Printable ASCII excl. ':'
 isFtext :: Word8 -> Bool
