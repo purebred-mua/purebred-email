@@ -270,42 +270,40 @@ buildPhrase "" = "\"\""
 buildPhrase s =
   case enc s of
     PhraseAtom -> T.encodeUtf8Builder s
-    PhraseQuotedString _ -> "\"" <> T.encodeUtf8BuilderEscaped escPrim s <> "\""
+    PhraseQuotedString -> qsBuilder False
+    PhraseQuotedStringEscapeSpace -> qsBuilder True
     PhraseEncodedWord -> buildEncodedWord . transferEncode . charsetEncode $ s
   where
-    enc = T.foldr (\c z -> encChar c <> z) mempty
-    encChar c
+    enc = snd . T.foldr (\c (prev, req) -> (c, encChar prev c <> req)) ('\0', mempty)
+    encChar prev c
       | isAtext c = PhraseAtom
-      | isQtext c = PhraseQuotedString 0
-      | isVchar c || c == ' ' = PhraseQuotedString 1
+      | isQtext c = PhraseQuotedString
+      | isVchar c = PhraseQuotedString
+      | c == ' ' =
+          if prev == ' '  -- two spaces in a row; need to avoid FWS
+          then PhraseQuotedStringEscapeSpace
+          else PhraseQuotedString
       | otherwise = PhraseEncodedWord
 
-    -- FIXME: this probably doesn't handle consecutive SPACE properly
-    -- due to FWS:
-    --
-    --    quoted-string   =   [CFWS]
-    --                        DQUOTE *([FWS] qcontent) [FWS] DQUOTE
-    --                        [CFWS]
-    --
-    -- Do not be surprised if the roundtrip property fails
-    --
-    escPrim = Prim.condB (\c -> isQtext c || c == 32)
+    qsBuilder escSpace = "\"" <> T.encodeUtf8BuilderEscaped (escPrim escSpace) s <> "\""
+    escPrim escSpace = Prim.condB (\c -> isQtext c || not escSpace && c == 32)
       (Prim.liftFixedToBounded Prim.word8)
       (Prim.liftFixedToBounded $ (fromChar '\\',) Prim.>$< Prim.word8 Prim.>*< Prim.word8)
 
 -- | Data type used to compute escaping requirement of a Text 'phrase'
--- 'PhraseQuotedString' records the number of additional characters
--- needed for escapes (backslash).  It does not include the surrounding
--- DQUOTE characters.
 --
-data PhraseEscapeRequirement = PhraseAtom | PhraseQuotedString Int | PhraseEncodedWord
+data PhraseEscapeRequirement
+  = PhraseAtom
+  | PhraseQuotedString
+  | PhraseQuotedStringEscapeSpace
+  | PhraseEncodedWord
+  deriving (Eq, Ord)
 
 instance Semigroup PhraseEscapeRequirement where
-  PhraseEncodedWord <> _ = PhraseEncodedWord
-  PhraseAtom <> a = a
-  PhraseQuotedString n <> PhraseQuotedString m = PhraseQuotedString (n + m)
-  a <> PhraseAtom = a
-  _ <> PhraseEncodedWord = PhraseEncodedWord
+  PhraseEncodedWord <> _ =
+    -- allows early termination of folds
+    PhraseEncodedWord
+  l <> r = max l r
 
 instance Monoid PhraseEscapeRequirement where
   mempty = PhraseAtom
