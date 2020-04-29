@@ -27,7 +27,7 @@ module Message where
 
 import Data.Char (isPrint)
 import Data.Foldable (fold)
-import Data.List.NonEmpty (NonEmpty, intersperse)
+import Data.List.NonEmpty (NonEmpty(..), intersperse)
 
 import Control.Lens (set, view)
 import qualified Data.ByteString as B
@@ -47,6 +47,10 @@ tests = testGroup "message tests"
   [ testProperty "message round trip" prop_messageRoundTrip
   , localOption (HedgehogTestLimit (Just 10000)) $
       testProperty "message round trip with From header" prop_messageFromRoundTrip
+  , testProperty "mailbox with consecutive spaces" $
+      -- https://github.com/purebred-mua/purebred-email/issues/56
+      let m = Mailbox (Just "  ") (AddrSpec "!" (DomainDotAtom ("!" :| [])))
+      in withTests 1 . property . assert $ renderMailbox m == "\"\\ \\ \" <!@!>"
   ]
 
 printableAsciiChar, printableUnicodeChar, unicodeCharAsciiBias :: Gen Char
