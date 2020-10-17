@@ -63,6 +63,7 @@ module Data.MIME
   , matchContentType
   , ctEq
   , parseContentType
+  , renderContentType
   , showContentType
   , mimeBoundary
 
@@ -79,6 +80,7 @@ module Data.MIME
   , dispositionType
   , filename
   , filenameParameter
+  , renderContentDisposition
 
   -- ** Mail creation
   -- *** Common use cases
@@ -484,8 +486,8 @@ matchContentType
 matchContentType wantType wantSubtype (ContentType gotType gotSubtype _) =
   wantType == gotType && maybe True (== gotSubtype) wantSubtype
 
-printContentType :: ContentType -> B.ByteString
-printContentType (ContentType typ sub params) =
+renderContentType :: ContentType -> B.ByteString
+renderContentType (ContentType typ sub params) =
   CI.original typ <> "/" <> CI.original sub <> printParameters params
 
 printParameters :: Parameters -> B.ByteString
@@ -510,7 +512,7 @@ ctParameters f (ContentType a b c) = fmap (\c' -> ContentType a b c') (f c)
 
 -- | Rendered content type field value for displaying
 showContentType :: ContentType -> T.Text
-showContentType = decodeLenient . printContentType
+showContentType = decodeLenient . renderContentType
 
 instance HasParameters ContentType where
   parameters = ctParameters
@@ -649,7 +651,7 @@ contentType = headers . lens sa sbt where
     Just _ ->
       fromMaybe defaultContentType $ preview (ct . parsed parseContentType) s
 
-  sbt s b = set (at "Content-Type") (Just (printContentType b)) s
+  sbt s b = set (at "Content-Type") (Just (renderContentType b)) s
 
   ct = header "content-type"
   cte = contentTransferEncoding . to (`lookup` transferEncodings)
@@ -693,8 +695,9 @@ parseContentDisposition = ContentDisposition
       | s == "inline" = Inline
       | otherwise = Attachment
 
-printContentDisposition :: ContentDisposition -> B.ByteString
-printContentDisposition (ContentDisposition typ params) =
+-- | Render the Content-Disposition value, including parameters.
+renderContentDisposition :: ContentDisposition -> B.ByteString
+renderContentDisposition (ContentDisposition typ params) =
   typStr <> printParameters params
   where
     typStr = case typ of Inline -> "inline" ; Attachment -> "attachment"
@@ -711,7 +714,7 @@ printContentDisposition (ContentDisposition typ params) =
 contentDisposition :: HasHeaders a => Lens' a (Maybe ContentDisposition)
 contentDisposition = headers . at "Content-Disposition" . dimap
   (>>= either (const Nothing) Just . Data.RFC5322.parse parseContentDisposition)
-  (fmap . fmap $ printContentDisposition)
+  (fmap . fmap $ renderContentDisposition)
 
 -- | Traverse the value of the filename parameter (if present).
 --
