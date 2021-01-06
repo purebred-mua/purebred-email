@@ -34,7 +34,7 @@ extra-source-files:
   tests/golden/*.golden
 cabal-version:       >=1.10
 tested-with:
-  GHC==8.4.4, GHC==8.6.5, GHC==8.8.3, GHC==8.10.1
+  GHC==8.4.4, GHC==8.6.5, GHC==8.8.4, GHC==8.10.3
 
 homepage:            https://github.com/purebred-mua/purebred-email
 bug-reports:         https://github.com/purebred-mua/purebred-email/issues
