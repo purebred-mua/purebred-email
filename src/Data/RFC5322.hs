@@ -376,7 +376,7 @@ addressList charsets = address charsets `sepBy` char8 ','
 
 group :: CharsetLookup -> Parser Address
 group charsets =
-  Group <$> (displayName charsets) <* char8 ':'
+  Group <$> displayName charsets <* char8 ':'
         <*> mailboxList charsets <* char8 ';' <* optionalCFWS
 
 address :: CharsetLookup -> Parser Address

@@ -5,7 +5,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE TypeFamilies #-}
-{-# LANGUAGE TypeSynonymInstances #-}
 
 {- |
 
@@ -108,6 +107,7 @@ module Data.MIME
   ) where
 
 import Control.Applicative
+import Data.Either (fromRight)
 import Data.Foldable (fold)
 import Data.List.NonEmpty (NonEmpty, fromList, intersperse)
 import Data.Maybe (fromMaybe, catMaybes)
@@ -671,7 +671,7 @@ data DispositionType = Inline | Attachment
 dispositionType :: Lens' ContentDisposition DispositionType
 dispositionType f (ContentDisposition a b) =
   fmap (\a' -> ContentDisposition a' b) (f a)
-{-# ANN dispositionType ("HLint: ignore Avoid lambda" :: String) #-}
+{-# ANN dispositionType ("HLint: ignore Avoid lambda using `infix`" :: String) #-}
 
 dispositionParameters :: Lens' ContentDisposition Parameters
 dispositionParameters f (ContentDisposition a b) =
@@ -840,13 +840,13 @@ headerSingleToList f g k =
 
 headerFrom :: HasHeaders a => CharsetLookup -> Lens' a [Mailbox]
 headerFrom charsets = headerSingleToList
-  (either (const []) id . parseOnly (mailboxList charsets))
+  (fromRight [] . parseOnly (mailboxList charsets))
   renderMailboxes
   "From"
 
 headerAddressList :: (HasHeaders a) => CI B.ByteString -> CharsetLookup -> Lens' a [Address]
 headerAddressList k charsets = headerSingleToList
-  (either (const []) id . parseOnly (addressList charsets))
+  (fromRight [] . parseOnly (addressList charsets))
   renderAddresses
   k
 
