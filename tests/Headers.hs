@@ -5,7 +5,6 @@ module Headers where
 import Control.Lens
 import Data.List.NonEmpty (NonEmpty((:|)))
 import Data.String (IsString)
-import Data.Semigroup ((<>))
 import Data.Word (Word8)
 
 import qualified Data.ByteString as B

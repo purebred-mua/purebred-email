@@ -111,7 +111,6 @@ import Data.Either (fromRight)
 import Data.Foldable (fold)
 import Data.List.NonEmpty (NonEmpty, fromList, intersperse)
 import Data.Maybe (fromMaybe, catMaybes)
-import Data.Semigroup ((<>))
 import Data.String (IsString(fromString))
 import GHC.Generics (Generic)
 

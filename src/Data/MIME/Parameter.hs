@@ -39,7 +39,7 @@ module Data.MIME.Parameter
 import Control.Applicative ((<|>), optional)
 import Data.Foldable (fold)
 import Data.Functor (($>))
-import Data.Semigroup ((<>), Sum(..), Max(..))
+import Data.Semigroup (Sum(..), Max(..))
 import Data.String (IsString(..))
 import Data.Word (Word8)
 import Data.Void (Void)

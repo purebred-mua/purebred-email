@@ -7,7 +7,6 @@ diagnosis of the problem.
 -}
 
 import Data.Foldable (traverse_)
-import Data.Semigroup ((<>))
 import System.Environment (getArgs)
 
 import qualified Data.ByteString as B

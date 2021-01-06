@@ -64,7 +64,6 @@ import Data.Char (chr)
 import Data.Foldable (fold)
 import Data.Functor (($>))
 import Data.List.NonEmpty (NonEmpty, fromList, intersperse)
-import Data.Semigroup (Semigroup((<>)))
 import Data.Semigroup.Foldable (fold1)
 import qualified Data.Text as T
 import Data.Word (Word8)

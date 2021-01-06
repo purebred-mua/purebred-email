@@ -19,7 +19,6 @@ module Data.MIME.EncodedWord
   ) where
 
 import Control.Applicative ((<|>), liftA2, optional)
-import Data.Semigroup ((<>))
 import Data.Maybe (fromMaybe)
 import Data.Monoid (Sum(Sum), Any(Any))
 

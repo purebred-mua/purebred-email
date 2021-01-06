@@ -20,7 +20,6 @@ module Data.RFC5322.Address.Text
 
 import Control.Applicative ((<|>), optional)
 import Data.Foldable (fold)
-import Data.Semigroup ((<>))
 import Data.List (intersperse)
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
