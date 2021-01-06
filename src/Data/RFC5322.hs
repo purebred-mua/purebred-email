@@ -117,7 +117,6 @@ import Control.Applicative
 import Data.Foldable (fold)
 import Data.List (findIndex, intersperse)
 import Data.List.NonEmpty (intersperse)
-import Data.Semigroup ((<>))
 import Data.Word (Word8)
 import GHC.Generics (Generic)
 
