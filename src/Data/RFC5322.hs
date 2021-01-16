@@ -96,14 +96,14 @@ module Data.RFC5322
 
   -- * Helpers
   , field
-  , rfc5422DateTimeFormat
-  , rfc5422DateTimeFormatLax
+  , rfc5322DateTimeFormat
+  , rfc5322DateTimeFormatLax
 
   -- * Serialisation
   , buildMessage
   , renderMessage
   , RenderMessage(..)
-  , renderRFC5422Date
+  , renderRFC5322Date
   , buildFields
   , buildField
   , renderAddressSpec
@@ -241,14 +241,14 @@ special = satisfy isSpecial
 
 -- §3.3  Date and Time Specification
 -- Sat, 29 Sep 2018 12:51:05 +1000
-rfc5422DateTimeFormat :: String
-rfc5422DateTimeFormat = "%a, %d %b %Y %T %z"
+rfc5322DateTimeFormat :: String
+rfc5322DateTimeFormat = "%a, %d %b %Y %T %z"
 
-rfc5422DateTimeFormatLax :: String
-rfc5422DateTimeFormatLax = "%a, %-d %b %Y %-H:%-M:%-S %z"
+rfc5322DateTimeFormatLax :: String
+rfc5322DateTimeFormatLax = "%a, %-d %b %Y %-H:%-M:%-S %z"
 
-renderRFC5422Date :: UTCTime -> B.ByteString
-renderRFC5422Date = Char8.pack . formatTime defaultTimeLocale rfc5422DateTimeFormat
+renderRFC5322Date :: UTCTime -> B.ByteString
+renderRFC5322Date = Char8.pack . formatTime defaultTimeLocale rfc5322DateTimeFormat
 
 -- §3.4 Address Specification
 buildMailbox :: Mailbox -> Builder.Builder
