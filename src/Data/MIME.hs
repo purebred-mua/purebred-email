@@ -857,8 +857,11 @@ headerBCC = headerAddressList "Bcc"
 headerDate :: HasHeaders a => Lens' a (Maybe UTCTime)
 headerDate = headers . at "Date" . iso (parseDate =<<) (fmap renderRFC5322Date)
   where
+    -- §3.3.  Date and Time Specification
+    -- date-time       =   [ day-of-week "," ] date time [CFWS]
+    dropCFWS = C8.takeWhile (/= '(')
     parseDate =
-        parseTimeM True defaultTimeLocale rfc5322DateTimeFormatLax . C8.unpack
+        parseTimeM True defaultTimeLocale rfc5322DateTimeFormatLax . C8.unpack . dropCFWS
 
 -- | Single-valued header with @Text@ value via encoded-words.
 -- The conversion to/from Text is total (encoded-words that failed to be
