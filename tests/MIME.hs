@@ -200,6 +200,10 @@ testOptics = testGroup "optics tests"
       testHeaderDateGet
       "Thu, 4 May 2017 03:08:43 +0000"
       (Just $ read "2017-05-04 03:08:43 UTC")
+  , testCase "headerDate get valid date with comment" $
+      testHeaderDateGet
+      "Fri, 15 Jan 2021 18:17:11 -0500 (EST)"
+      (Just $ read "2021-01-15 18:17:11 EST")
   , testCase "headerDate get invalid date" $
       testHeaderDateGet
       "Thu, 4 NOTMAY 2017 03:08:43 +0000"
