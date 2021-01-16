@@ -80,5 +80,5 @@ multiPartMail =
     in createMultipartMixedMessage "asdf" (fromList [p, a])
        & set (headers . at "From") (Just $ renderMailboxes [from'])
        . set (headers . at "To") (Just $ renderAddresses [to'])
-       . set (headers . at "Date") (Just $ renderRFC5422Date now)
+       . set (headers . at "Date") (Just $ renderRFC5322Date now)
        . set (headers . at "Subject") (Just $ T.encodeUtf8 subject)
