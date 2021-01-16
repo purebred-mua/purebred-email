@@ -855,10 +855,10 @@ headerCC = headerAddressList "Cc"
 headerBCC = headerAddressList "Bcc"
 
 headerDate :: HasHeaders a => Lens' a (Maybe UTCTime)
-headerDate = headers . at "Date" . iso (parseDate =<<) (fmap renderRFC5422Date)
+headerDate = headers . at "Date" . iso (parseDate =<<) (fmap renderRFC5322Date)
   where
     parseDate =
-        parseTimeM True defaultTimeLocale rfc5422DateTimeFormatLax . C8.unpack
+        parseTimeM True defaultTimeLocale rfc5322DateTimeFormatLax . C8.unpack
 
 -- | Single-valued header with @Text@ value via encoded-words.
 -- The conversion to/from Text is total (encoded-words that failed to be
