@@ -14,6 +14,7 @@ module Data.RFC5322.Internal
 
   -- * Abstract character parsers
   , wsp
+  , fws
   , optionalFWS
   , optionalCFWS
   , crlf
@@ -166,6 +167,8 @@ crlf = void ((char '\r' *> char '\n') <|> char '\n')
 -- white space (not simply WSP characters), a CRLF may be inserted before any
 -- WSP."
 
+-- | Folding white space (FWS).  A run of one or more whitespace
+-- characters.  Returns a single SPACE character.
 fws :: (Alternative (f s), CharParsing f s a) => (f s) s
 fws = ( optional (takeWhile isWsp *> crlf) *> takeWhile1 isWsp )
       $> singleton ' '
