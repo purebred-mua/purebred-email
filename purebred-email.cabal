@@ -23,7 +23,7 @@ license:             AGPL-3.0-or-later
 license-file:        LICENSE
 author:              Fraser Tweedale
 maintainer:          frase@frase.id.au
-copyright:           Copyright 2017-2019  Fraser Tweedale
+copyright:           Copyright 2017-2021  Fraser Tweedale
 category:            Data, Email
 build-type:          Simple
 extra-source-files:
@@ -31,7 +31,7 @@ extra-source-files:
   test-vectors/*.eml
   tests/golden/*.golden
 tested-with:
-  GHC ==8.4.4 || ==8.6.5 || ==8.8.4 || ==8.10.4 || ==9.0.1
+  GHC ==8.8.4 || ==8.10.4 || ==9.0.1
 
 homepage:            https://github.com/purebred-mua/purebred-email
 bug-reports:         https://github.com/purebred-mua/purebred-email/issues
@@ -55,7 +55,7 @@ common common
     , lens >= 4 && < 6
     , semigroups >= 0.16
     , text >= 1.2
-    , time >= 1.8
+    , time >= 1.9
 
 library
   import: common
@@ -75,6 +75,7 @@ library
     , Data.MIME.QuotedPrintable
   other-modules:
     Data.MIME.Internal
+    , Data.RFC5322.DateTime
   -- other-extensions:    
   build-depends:
     , base64-bytestring >= 1 && < 2
