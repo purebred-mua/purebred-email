@@ -78,6 +78,7 @@ module Data.RFC5322
   , Headers(..)
 
   -- ** Date and Time
+  , headerDate
   , dateTime
 
   -- ** Addresses
@@ -99,8 +100,6 @@ module Data.RFC5322
 
   -- * Helpers
   , field
-  , rfc5322DateTimeFormat
-  , rfc5322DateTimeFormatLax
 
   -- * Serialisation
   , buildMessage
@@ -136,7 +135,7 @@ import qualified Data.ByteString.Builder as Builder
 import qualified Data.ByteString.Builder.Prim as Prim
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
-import Data.Time (UTCTime, defaultTimeLocale, formatTime)
+import Data.Time (ZonedTime, defaultTimeLocale, formatTime)
 
 import Data.RFC5322.Internal
   ( CI, ci, original
@@ -247,11 +246,13 @@ special = satisfy isSpecial
 rfc5322DateTimeFormat :: String
 rfc5322DateTimeFormat = "%a, %d %b %Y %T %z"
 
-rfc5322DateTimeFormatLax :: String
-rfc5322DateTimeFormatLax = "%a, %-d %b %Y %-H:%-M:%-S %z"
-
-renderRFC5322Date :: UTCTime -> B.ByteString
+renderRFC5322Date :: ZonedTime -> B.ByteString
 renderRFC5322Date = Char8.pack . formatTime defaultTimeLocale rfc5322DateTimeFormat
+
+headerDate :: HasHeaders a => Lens' a (Maybe ZonedTime)
+headerDate = headers . at "Date" . iso (>>= p) (fmap renderRFC5322Date)
+  where
+  p = either (const Nothing) Just . parseOnly (dateTime <* endOfInput)
 
 -- §3.4 Address Specification
 buildMailbox :: Mailbox -> Builder.Builder

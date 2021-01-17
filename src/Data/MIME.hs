@@ -125,8 +125,6 @@ import qualified Data.ByteString.Builder as Builder
 import qualified Data.CaseInsensitive as CI
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
-import Data.Time.Clock (UTCTime)
-import Data.Time.Format (defaultTimeLocale, parseTimeM)
 
 import Data.RFC5322
 import Data.RFC5322.Internal hiding (takeWhile1)
@@ -854,12 +852,6 @@ headerTo, headerCC, headerBCC :: (HasHeaders a) => CharsetLookup -> Lens' a [Add
 headerTo = headerAddressList "To"
 headerCC = headerAddressList "Cc"
 headerBCC = headerAddressList "Bcc"
-
-headerDate :: HasHeaders a => Lens' a (Maybe UTCTime)
-headerDate = headers . at "Date" . iso (parseDate =<<) (fmap renderRFC5322Date)
-  where
-    parseDate =
-        parseTimeM True defaultTimeLocale rfc5322DateTimeFormatLax . C8.unpack
 
 -- | Single-valued header with @Text@ value via encoded-words.
 -- The conversion to/from Text is total (encoded-words that failed to be
