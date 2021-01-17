@@ -77,6 +77,9 @@ module Data.RFC5322
   , headerList
   , Headers(..)
 
+  -- ** Date and Time
+  , dateTime
+
   -- ** Addresses
   , Address(..)
   , address
@@ -133,8 +136,7 @@ import qualified Data.ByteString.Builder as Builder
 import qualified Data.ByteString.Builder.Prim as Prim
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
-import Data.Time.Clock (UTCTime)
-import Data.Time.Format (defaultTimeLocale, formatTime)
+import Data.Time (UTCTime, defaultTimeLocale, formatTime)
 
 import Data.RFC5322.Internal
   ( CI, ci, original
@@ -143,6 +145,7 @@ import Data.RFC5322.Internal
   , optionalCFWS, word, wsp, vchar, optionalFWS, crlf
   , domainLiteral, dotAtom, localPart, quotedString
   )
+import Data.RFC5322.DateTime (dateTime)
 import Data.RFC5322.Address.Types
 import Data.MIME.Charset
 import Data.MIME.EncodedWord (encodedWord, decodeEncodedWord, buildEncodedWord)
