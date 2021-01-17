@@ -1,5 +1,5 @@
 -- This file is part of purebred-email
--- Copyright (C) 2019  Fraser Tweedale
+-- Copyright (C) 2019, 2021  Fraser Tweedale
 --
 -- purebred-email is free software: you can redistribute it and/or modify
 -- it under the terms of the GNU Affero General Public License as published by
@@ -23,6 +23,7 @@ import Data.Either (isLeft)
 import Data.Attoparsec.ByteString.Lazy as AL
 import Data.ByteString as B
 import Data.ByteString.Lazy as L
+import Data.Time (ZonedTime(ZonedTime), timeZoneMinutes)
 import Test.QuickCheck.Instances ()
 import Test.Tasty
 import Test.Tasty.HUnit
@@ -43,6 +44,7 @@ tests = testGroup "Parser tests"
             AL.Done r' l' -> r' == L.fromStrict r && l' == l
             _ -> False
   , testBodyParsing
+  , testDateTimeParsing
   ]
 
 
@@ -79,3 +81,75 @@ testBodyParsing = testGroup "BodyHandler tests"
     msg = "From: alice@example.net\r\n"
     hdrs = Headers [("From", "alice@example.net")]
     opt _ = OptionalBody (Present <$> AL.string "yeah", NotPresent)
+
+testDateTimeParsing :: TestTree
+testDateTimeParsing = testGroup "dateTime parsing" $
+  let
+    now = explode $ read "2021-01-03 20:16:00 +1000"
+    go = fmap explode . parseOnly (dateTime <* endOfInput)
+    explode (ZonedTime lt z) = (lt, timeZoneMinutes z)
+  in
+    [ testCase "good (full)" $
+        go "Sun, 03 Jan 2021 20:16:00 +1000"
+        @?= Right now
+    , testCase "good (comment)" $
+        go "Sun, 03 Jan 2021 20:16:00 +1000 (wat)"
+        @?= Right now
+    , testCase "good (extra whitespace)" $
+        go "  Sun,  03  Jan  2021  20:16:00  +1000  "
+        @?= Right now
+    , testCase "good (no seconds)" $
+        go "Sun, 03 Jan 2021 20:16 +1000"
+        @?= Right now
+    , testCase "good (no day-of-week)" $
+        go "03 Jan 2021 20:16:00 +1000"
+        @?= Right now
+    , testCase "good (single-digit date)" $
+        go "Sun, 3 Jan 2021 20:16:00 +1000"
+        @?= Right now
+    , testCase "good (leap second)" $
+        go "Sun, 03 Jan 2021 20:16:60 +1000"
+        @?= Right (explode $ read "2021-01-03 20:16:60 +1000")
+    , testCase "good (5-digit year)" $
+        go "Sun, 03 Jan 12021 20:16:00 +1000"
+        @?= Right (explode $ read "12021-01-03 20:16:00 +1000")
+    , testCase "bad (invalid day-of-week)" $
+        isLeft (go "Moo, 03 Jan 2021 20:16:00 +1000")
+        @?= True
+    , testCase "bad (inconsistent day-of-week)" $
+        isLeft (go "Mon, 03 Jan 2021 20:16:00 +1000")
+        @?= True
+    , testCase "bad (day < 1)" $
+        isLeft (go "Thu, 01 Jan 2021 20:16:00 +1000")
+        @?= True
+    , testCase "bad (out of range day)" $
+        isLeft (go "Tue, 33 Jan 2021 20:16:00 +1000")
+        @?= True
+    , testCase "bad (inconsistent day of month)" $
+        isLeft (go "Mon, 29 Feb 2021 20:16:00 +1000")
+        @?= True
+    , testCase "bad (invalid month)" $
+        isLeft (go "Sun, 03 Joo 2021 20:16:00 +1000")
+        @?= True
+    , testCase "bad (year insufficient digits)" $
+        isLeft (go "Wed, 03 Jan 899 20:16:00 +1000")
+        @?= True
+    , testCase "bad (year < 1900)" $
+        isLeft (go "Sun, 03 Jan 1899 20:16:00 +1000")
+        @?= True
+    , testCase "bad (hour > 23)" $
+        isLeft (go "Sun, 03 Jan 2021 24:16:00 +1000")
+        @?= True
+    , testCase "bad (minute > 59)" $
+        isLeft (go "Sun, 03 Jan 2021 20:60:00 +1000")
+        @?= True
+    , testCase "bad (second > 60)" $
+        isLeft (go "Sun, 03 Jan 2021 20:16:61 +1000")
+        @?= True
+    , testCase "bad (no timezone)" $
+        isLeft (go "Sun, 03 Jan 2021 20:16:00")
+        @?= True
+    , testCase "bad (invalid tz seconds)" $
+        isLeft (go "Sun, 03 Jan 2021 20:16:00 +0960")
+        @?= True
+    ]
