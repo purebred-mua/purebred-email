@@ -11,9 +11,7 @@ import Test.Tasty.HUnit ((@=?), testCase)
 import Test.Tasty.Golden (goldenVsStringDiff)
 import Control.Lens (over, (&), set, at)
 import qualified Data.Text.Encoding as T
-import qualified Data.ByteString.Lazy as LB
-import Data.Time.Clock (UTCTime(..), secondsToDiffTime)
-import Data.Time.Calendar (Day(..))
+import Data.Time (Day(..), UTCTime(..), secondsToDiffTime, utc, utcToZonedTime)
 
 import qualified Data.CaseInsensitive as CI
 
@@ -76,7 +74,8 @@ multiPartMail =
                 contentTypeApplicationOctetStream
                 (Just "foo.bin")
                 "fileContentsASDF"
-        now = UTCTime (ModifiedJulianDay 123) (secondsToDiffTime 123)
+        nowUTC = UTCTime (ModifiedJulianDay 123) (secondsToDiffTime 123)
+        now = utcToZonedTime utc nowUTC
     in createMultipartMixedMessage "asdf" (fromList [p, a])
        & set (headers . at "From") (Just $ renderMailboxes [from'])
        . set (headers . at "To") (Just $ renderAddresses [to'])

@@ -26,11 +26,11 @@ import Data.Char (toUpper)
 import Data.Either (isLeft)
 import Data.List.NonEmpty (fromList)
 import Data.String (fromString)
-import Data.Time.Clock (UTCTime)
 
 import Control.Lens
 import qualified Data.ByteString as B
 import qualified Data.Text as T
+import Data.Time (ZonedTime(ZonedTime), timeZoneMinutes)
 
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit ((@?=), Assertion, assertBool, assertFailure, testCase)
@@ -209,15 +209,17 @@ testOptics = testGroup "optics tests"
   , testCase "headerDate unset" $ testHeaderDateSet Nothing
   ]
 
-testHeaderDateGet :: B.ByteString -> Maybe UTCTime -> Assertion
+testHeaderDateGet :: B.ByteString -> Maybe ZonedTime -> Assertion
 testHeaderDateGet headerStr time =
-  view headerDate msg @?= time
+  fmap explode (view headerDate msg) @?= fmap explode time
   where
     Right msg = parse (message mime) msgStr
     msgStr = "Date: " <> headerStr <> "\n\nbody\n" :: B.ByteString
+    explode (ZonedTime lt z) = (lt, timeZoneMinutes z)
 
-testHeaderDateSet :: Maybe UTCTime -> Assertion
+testHeaderDateSet :: Maybe ZonedTime -> Assertion
 testHeaderDateSet time =
-  view headerDate msg @?= time
+  fmap explode (view headerDate msg) @?= fmap explode time
   where
+    explode (ZonedTime lt z) = (lt, timeZoneMinutes z)
     msg = set headerDate time $ createTextPlainMessage "body"
