@@ -21,8 +21,9 @@ module Parser where
 import Data.Either (isLeft)
 
 import Data.Attoparsec.ByteString.Lazy as AL
-import Data.ByteString as B
-import Data.ByteString.Lazy as L
+import qualified Data.ByteString as B
+import qualified Data.ByteString.Char8 as Char8
+import qualified Data.ByteString.Lazy as L
 import Data.Time (ZonedTime(ZonedTime), timeZoneMinutes)
 import Test.QuickCheck.Instances ()
 import Test.Tasty
@@ -151,5 +152,18 @@ testDateTimeParsing = testGroup "dateTime parsing" $
         @?= True
     , testCase "bad (invalid tz seconds)" $
         isLeft (go "Sun, 03 Jan 2021 20:16:00 +0960")
+        @?= True
+    , testCase "good (obs-zone grammar)" $
+        (fmap (fmap snd) . traverse go . fmap ("Sun, 03 Jan 2021 20:16:00 " <>))
+          (
+            ["UT", "GMT", "EST", "EDT", "CST", "CDT", "MST", "MDT", "PST", "PDT"]
+            <> fmap Char8.singleton (['A'..'I'] <> ['K'..'Z'] <> ['a'..'i'] <> ['k'..'z'])
+          )
+        @?= Right (
+          let mil = [1..12] <> fmap negate [1..12] <> [0]
+          in fmap (* 60) ([0, 0, -5, -4, -6, -5, -7, -6, -8, -7] <> mil <> mil)
+        )
+    , testCase "bad (obs-zone grammar)" $
+        all (isLeft . go) (("Sun, 03 Jan 2021 20:16:00 " <>) <$> ["UTC", "CET", "AEST", "J"])
         @?= True
     ]

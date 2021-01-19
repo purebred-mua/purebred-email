@@ -28,9 +28,9 @@ import Data.Attoparsec.ByteString.Char8 (char8, isDigit_w8)
 import qualified Data.ByteString as B
 import qualified Data.Time
 import Data.Time
-  ( Day, DayOfWeek(..), LocalTime(LocalTime), TimeOfDay, TimeZone
+  ( Day, DayOfWeek(..), LocalTime(LocalTime), TimeOfDay, TimeZone(TimeZone)
   , ZonedTime(ZonedTime), fromGregorianValid, makeTimeOfDayValid
-  , minutesToTimeZone
+  , minutesToTimeZone, hoursToTimeZone, utc
   )
 import Data.RFC5322.Internal (fws, optionalCFWS, optionalFWS)
 
@@ -117,7 +117,7 @@ timeOfDay = do
     Just tod -> pure tod
 
 zone :: Parser TimeZone
-zone = fws *> go
+zone = fws *> (go <|> obsZone)
   where
   go = do
     posNeg <- char8 '+' $> id <|> char8 '-' $> negate
@@ -125,6 +125,34 @@ zone = fws *> go
     m <- twoDigit
     guardFail (m <= 59) "zone minutes must be in range 0..59"
     pure $ minutesToTimeZone (posNeg (h * 60 + m))
+
+obsZone :: Parser TimeZone
+obsZone =
+  utc <$ (string "GMT" <|> string "UT")
+  <|> usZone
+  <|> milZone
+  where
+  usZone = do
+    (off, c1) <-
+      charVal (-5) 'E'      -- eastern
+      <|> charVal (-6) 'C'  -- central
+      <|> charVal (-7) 'M'  -- mountain
+      <|> charVal (-8) 'P'  -- pacific
+    (dst, c2) <- charVal 0 'S' <|> charVal 1 'D'  -- standard / dst
+    _ <- char8 'T'
+    pure $ TimeZone ((off + dst) * 60) (dst == 1) (c1:c2:"T")
+  charVal a c = (a, c) <$ char8 c
+  milZone =
+    utc <$ (char8 'Z' <|> char8 'z')
+    <|> go     id 0x40 0x41 0x49  -- A..I
+    <|> go     id 0x41 0x4b 0x4d  -- K..M
+    <|> go negate 0x4d 0x4c 0x59  -- N..Y
+    <|> go     id 0x60 0x61 0x69  -- a..i
+    <|> go     id 0x61 0x6b 0x6d  -- k..m
+    <|> go negate 0x6d 0x6e 0x79  -- n..y
+  go f off lo hi =
+    hoursToTimeZone . f . subtract off . fromIntegral
+    <$> satisfy (\c -> c >= lo && c <= hi)
 
 
 guardFail :: Bool -> String -> Parser ()
