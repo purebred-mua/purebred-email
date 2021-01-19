@@ -133,7 +133,7 @@ testDateTimeParsing = testGroup "dateTime parsing" $
         isLeft (go "Sun, 03 Joo 2021 20:16:00 +1000")
         @?= True
     , testCase "bad (year insufficient digits)" $
-        isLeft (go "Wed, 03 Jan 899 20:16:00 +1000")
+        isLeft (go "03 Jan 9 20:16:00 +1000")
         @?= True
     , testCase "bad (year < 1900)" $
         isLeft (go "Sun, 03 Jan 1899 20:16:00 +1000")
@@ -166,4 +166,16 @@ testDateTimeParsing = testGroup "dateTime parsing" $
     , testCase "bad (obs-zone grammar)" $
         all (isLeft . go) (("Sun, 03 Jan 2021 20:16:00 " <>) <$> ["UTC", "CET", "AEST", "J"])
         @?= True
+    , testCase "good (obs-year 2 digit)" $
+        go "Sun, 03 Jan 21 20:16:00 +1000"
+        @?= Right now
+    , testCase "good (obs-year 3 digit)" $
+        go "Sun, 03 Jan 121 20:16:00 +1000"
+        @?= Right now
+    , testCase "good (obs-year 2 digit 2049)" $
+        go "Sun, 03 Jan 49 20:16:60 +1000"
+        @?= Right (explode $ read "2049-01-03 20:16:60 +1000")
+    , testCase "good (obs-year 2 digit 1950)" $
+        go "Tue, 03 Jan 50 20:16:60 +1000"
+        @?= Right (explode $ read "1950-01-03 20:16:60 +1000")
     ]
