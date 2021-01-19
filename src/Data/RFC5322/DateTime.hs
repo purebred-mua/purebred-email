@@ -21,6 +21,7 @@ module Data.RFC5322.DateTime
   ) where
 
 import Control.Applicative ((<|>), optional)
+import Control.Monad (guard)
 import Data.Functor (($>))
 
 import Data.Attoparsec.ByteString as A
@@ -97,14 +98,19 @@ month =
   <|> fail "invalid month"
 
 year :: Parser Integer
-year = fws *> go <* fws
+year = fws *> (go >>= check (>= 1900) "year cannot be < 1900") <* fws
   where
-  go = do
+  go = fourOrMoreDigit <|> obsYear <|> fail "too few digits in year"
+  fourOrMoreDigit = do
     digits <- A.takeWhile isDigit_w8
-    guardFail (B.length digits >= 4) "too few digits in year"
-    let y = B.foldl' step 0 digits
-    guardFail (y >= 1900) "year cannot be < 1900" $> y
+    guard (B.length digits >= 4)
+    pure (B.foldl' step 0 digits)
   step r a = r * 10 + fromIntegral (a - 48)
+  obsYear = do
+    yy <- twoDigit
+    fromIntegral
+      . maybe (yy + if yy <= 49 then 2000 else 1900) (1900 + yy * 10 +)
+      <$> optional digit
 
 timeOfDay :: Parser TimeOfDay
 timeOfDay = do
