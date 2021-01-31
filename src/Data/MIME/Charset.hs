@@ -89,6 +89,13 @@ class HasCharset a where
     -> ( forall p f. (Profunctor p, Contravariant f)
         => Optic' p f a (Either e (Decoded a)) )
 
+  -- | Structure with the encoded data replaced with 'Text' (monomorphic error type)
+  charsetDecoded'
+    :: CharsetLookup
+    -> ( forall p f. (Profunctor p, Contravariant f)
+        => Optic' p f a (Either CharsetError (Decoded a)) )
+  charsetDecoded' = charsetDecoded
+
   -- | Encode the data
   charsetEncode :: Decoded a -> a
 
