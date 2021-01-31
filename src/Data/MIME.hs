@@ -50,6 +50,7 @@ module Data.MIME
   , transferDecoded
   , transferDecoded'
   , charsetDecoded
+  , charsetDecoded'
 
   -- ** Header processing
   , decodeEncodedWords
