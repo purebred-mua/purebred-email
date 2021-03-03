@@ -88,16 +88,12 @@ module Data.MIME
   , createAttachment
   , createAttachmentFromFile
   , createMultipartMixedMessage
-  , encapsulate
-  -- *** Setting headers
-  , headerFrom
-  , headerTo
-  , headerCC
-  , headerBCC
-  , headerDate
-  , headerSubject
-  , headerText
+
+  -- *** Reply
   , replyHeaderReferences
+
+  -- *** Forward
+  , encapsulate
 
   -- * Re-exports
   , CharsetLookup
@@ -108,7 +104,6 @@ module Data.MIME
   ) where
 
 import Control.Applicative
-import Data.Either (fromRight)
 import Data.Foldable (fold)
 import Data.List.NonEmpty (NonEmpty, fromList, intersperse)
 import Data.Maybe (fromMaybe, catMaybes)
@@ -820,53 +815,6 @@ instance RenderMessage MIME where
         <> fold (intersperse ("\r\n" <> boundary <> "\r\n") (fmap buildMessage xs))
         <> "\r\n" <> boundary <> "--\r\n"
     FailedParse _ bs -> Builder.byteString bs
-
-
-
--- | Map a single-occurrence header to a list value.
--- On read, absent header is mapped to empty list.
--- On write, empty list results in absent header.
---
-headerSingleToList
-  :: (HasHeaders s)
-  => (B.ByteString -> [a])
-  -> ([a] -> B.ByteString)
-  -> CI B.ByteString
-  -> Lens' s [a]
-headerSingleToList f g k =
-  headers . at k . iso (maybe [] f) (\l -> if null l then Nothing else Just (g l))
-
-headerFrom :: HasHeaders a => CharsetLookup -> Lens' a [Mailbox]
-headerFrom charsets = headerSingleToList
-  (fromRight [] . parseOnly (mailboxList charsets))
-  renderMailboxes
-  "From"
-
-headerAddressList :: (HasHeaders a) => CI B.ByteString -> CharsetLookup -> Lens' a [Address]
-headerAddressList k charsets = headerSingleToList
-  (fromRight [] . parseOnly (addressList charsets))
-  renderAddresses
-  k
-
-headerTo, headerCC, headerBCC :: (HasHeaders a) => CharsetLookup -> Lens' a [Address]
-headerTo = headerAddressList "To"
-headerCC = headerAddressList "Cc"
-headerBCC = headerAddressList "Bcc"
-
--- | Single-valued header with @Text@ value via encoded-words.
--- The conversion to/from Text is total (encoded-words that failed to be
--- decoded are passed through unchanged).  Therefore @Nothing@ means that
--- the header was not present.
---
--- This function is suitable for the @Subject@ header.
---
-headerText :: (HasHeaders a) => CharsetLookup -> CI B.ByteString -> Lens' a (Maybe T.Text)
-headerText charsets k =
-  headers . at k . iso (fmap (decodeEncodedWords charsets)) (fmap encodeEncodedWords)
-
--- | Subject header.  See 'headerText' for details of conversion to @Text@.
-headerSubject :: (HasHeaders a) => CharsetLookup -> Lens' a (Maybe T.Text)
-headerSubject charsets = headerText charsets "Subject"
 
 
 -- | Returns a space delimited `B.ByteString` with values from identification

@@ -77,9 +77,23 @@ module Data.RFC5322
   , headerList
   , Headers(..)
 
-  -- ** Date and Time
+  -- *** Date and Time
   , headerDate
   , dateTime
+
+  -- *** Originator
+  , headerFrom
+
+  -- *** Destination Address
+  , headerTo
+  , headerCC
+  , headerBCC
+
+  -- *** Informational
+  , headerSubject
+
+  -- *** Arbitrary headers
+  , headerText
 
   -- ** Addresses
   , Address(..)
@@ -116,6 +130,7 @@ module Data.RFC5322
   ) where
 
 import Control.Applicative
+import Data.Either (fromRight)
 import Data.Foldable (fold)
 import Data.List (findIndex, intersperse)
 import Data.List.NonEmpty (intersperse)
@@ -147,7 +162,7 @@ import Data.RFC5322.Internal
 import Data.RFC5322.DateTime (dateTime)
 import Data.RFC5322.Address.Types
 import Data.MIME.Charset
-import Data.MIME.EncodedWord (encodedWord, decodeEncodedWord, buildEncodedWord)
+import Data.MIME.EncodedWord
 import Data.MIME.TransferEncoding (transferEncode)
 
 type Header = (CI B.ByteString, B.ByteString)
@@ -385,6 +400,51 @@ group charsets =
 address :: CharsetLookup -> Parser Address
 address charsets =
   group charsets <|> Single <$> mailbox charsets
+
+-- | Map a single-occurrence header to a list value.
+-- On read, absent header is mapped to empty list.
+-- On write, empty list results in absent header.
+--
+headerSingleToList
+  :: (HasHeaders s)
+  => (B.ByteString -> [a])
+  -> ([a] -> B.ByteString)
+  -> CI B.ByteString
+  -> Lens' s [a]
+headerSingleToList f g k =
+  headers . at k . iso (maybe [] f) (\l -> if null l then Nothing else Just (g l))
+
+headerFrom :: HasHeaders a => CharsetLookup -> Lens' a [Mailbox]
+headerFrom charsets = headerSingleToList
+  (fromRight [] . parseOnly (mailboxList charsets))
+  renderMailboxes
+  "From"
+
+headerAddressList :: (HasHeaders a) => CI B.ByteString -> CharsetLookup -> Lens' a [Address]
+headerAddressList k charsets = headerSingleToList
+  (fromRight [] . parseOnly (addressList charsets))
+  renderAddresses
+  k
+
+headerTo, headerCC, headerBCC :: (HasHeaders a) => CharsetLookup -> Lens' a [Address]
+headerTo = headerAddressList "To"
+headerCC = headerAddressList "Cc"
+headerBCC = headerAddressList "Bcc"
+
+-- | Single-valued header with @Text@ value via encoded-words.
+-- The conversion to/from Text is total (encoded-words that failed to be
+-- decoded are passed through unchanged).  Therefore @Nothing@ means that
+-- the header was not present.
+--
+-- This function is suitable for the @Subject@ header.
+--
+headerText :: (HasHeaders a) => CharsetLookup -> CI B.ByteString -> Lens' a (Maybe T.Text)
+headerText charsets k =
+  headers . at k . iso (fmap (decodeEncodedWords charsets)) (fmap encodeEncodedWords)
+
+-- | Subject header.  See 'headerText' for details of conversion to @Text@.
+headerSubject :: (HasHeaders a) => CharsetLookup -> Lens' a (Maybe T.Text)
+headerSubject charsets = headerText charsets "Subject"
 
 -- §3.5.  Overall Message Syntax
 
