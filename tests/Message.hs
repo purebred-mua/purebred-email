@@ -103,7 +103,7 @@ prop_messageRoundTrip = property $ do
 
 prop_messageFromRoundTrip :: Property
 prop_messageFromRoundTrip = property $ do
-  from <- forAll genMailbox
+  from <- Single <$> forAll genMailbox
   let
     l = headerFrom defaultCharsets
     msg = set l [from] (createTextPlainMessage "Hello")
