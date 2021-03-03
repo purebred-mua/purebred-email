@@ -83,6 +83,7 @@ module Data.RFC5322
 
   -- *** Originator
   , headerFrom
+  , headerReplyTo
 
   -- *** Destination Address
   , headerTo
@@ -414,19 +415,17 @@ headerSingleToList
 headerSingleToList f g k =
   headers . at k . iso (maybe [] f) (\l -> if null l then Nothing else Just (g l))
 
-headerFrom :: HasHeaders a => CharsetLookup -> Lens' a [Mailbox]
-headerFrom charsets = headerSingleToList
-  (fromRight [] . parseOnly (mailboxList charsets))
-  renderMailboxes
-  "From"
-
 headerAddressList :: (HasHeaders a) => CI B.ByteString -> CharsetLookup -> Lens' a [Address]
 headerAddressList k charsets = headerSingleToList
   (fromRight [] . parseOnly (addressList charsets))
   renderAddresses
   k
 
-headerTo, headerCC, headerBCC :: (HasHeaders a) => CharsetLookup -> Lens' a [Address]
+headerFrom, headerReplyTo, headerTo, headerCC, headerBCC
+  :: (HasHeaders a)
+  => CharsetLookup -> Lens' a [Address]
+headerFrom = headerAddressList "From"
+headerReplyTo = headerAddressList "Reply-To"
 headerTo = headerAddressList "To"
 headerCC = headerAddressList "Cc"
 headerBCC = headerAddressList "Bcc"

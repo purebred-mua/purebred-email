@@ -53,13 +53,13 @@ testFromToCcBccOptics = testGroup "headerFrom/To/Cc/Bcc tests" $
     bob = Mailbox Nothing (AddrSpec "bob" (DomainDotAtom ("example" :| ["com"])))
     carol = Mailbox Nothing (AddrSpec "carol" (DomainDotAtom ("example" :| ["com"])))
     msg = createTextPlainMessage "hi"
-    fromAlice = set (headerFrom defaultCharsets) [alice] msg
+    fromAlice = set (headerFrom defaultCharsets) [Single alice] msg
     fromAliceToBob = set (headerTo defaultCharsets) [Single bob] fromAlice
     fromAliceToCarolAndBob = over (headerTo defaultCharsets) (Single carol :) fromAliceToBob
   in
     [ testCase "From empty" $ view (headerFrom defaultCharsets) msg @?= []
     , testCase "To empty" $ view (headerTo defaultCharsets) msg @?= []
-    , testCase "set From alice" $ view (headerFrom defaultCharsets) fromAlice @?= [alice]
+    , testCase "set From alice" $ view (headerFrom defaultCharsets) fromAlice @?= [Single alice]
     , testCase "set To bob" $ view (headerTo defaultCharsets) fromAliceToBob @?= [Single bob]
     , testCase "add To carol" $ view (headerTo defaultCharsets) fromAliceToCarolAndBob @?= [Single carol, Single bob]
     , testCase "removing header" $ has (header "From") (set (headerFrom defaultCharsets) [] fromAlice) @?= False
