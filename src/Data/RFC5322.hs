@@ -170,12 +170,6 @@ type Header = (CI B.ByteString, B.ByteString)
 newtype Headers = Headers [Header]
   deriving (Eq, Show, Generic, NFData)
 
-instance Semigroup Headers where
-  Headers a <> Headers b = Headers (a <> b)
-
-instance Monoid Headers where
-  mempty = Headers []
-
 class HasHeaders a where
   headers :: Lens' a Headers
 
