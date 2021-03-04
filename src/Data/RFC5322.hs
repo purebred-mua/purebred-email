@@ -73,7 +73,6 @@ module Data.RFC5322
   -- * Headers
   , Header
   , HasHeaders(..)
-  , header
   , headerList
   , Headers(..)
 
@@ -99,9 +98,18 @@ module Data.RFC5322
   , headerSubject
 
   -- ** Arbitrary headers
+  , header
   , headerText
 
-  -- * Address types
+  -- * Types
+
+  -- ** Message ID
+  , MessageID
+  , parseMessageID
+  , buildMessageID
+  , renderMessageID
+
+  -- ** Address types
   , Address(..)
   , address
   , addressList
@@ -445,6 +453,9 @@ data MessageID = MessageID
   (Either (NonEmpty B.ByteString) B.ByteString)
   deriving (Eq, Ord)
 
+instance Show MessageID where
+  show = Char8.unpack . renderMessageID
+
 parseMessageID :: Parser MessageID
 parseMessageID =
   MessageID
@@ -488,8 +499,6 @@ headerReferences = headerMessageIDList "References"
 -- The conversion to/from Text is total (encoded-words that failed to be
 -- decoded are passed through unchanged).  Therefore @Nothing@ means that
 -- the header was not present.
---
--- This function is suitable for the @Subject@ header.
 --
 headerText :: (HasHeaders a) => CharsetLookup -> CI B.ByteString -> Lens' a (Maybe T.Text)
 headerText charsets k =
