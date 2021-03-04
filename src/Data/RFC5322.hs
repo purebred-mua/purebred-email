@@ -70,33 +70,38 @@ module Data.RFC5322
   , body
   , EqMessage(..)
 
-  -- ** Headers
+  -- * Headers
   , Header
   , HasHeaders(..)
   , header
   , headerList
   , Headers(..)
 
-  -- *** Date and Time
+  -- ** Date and Time
   , headerDate
   , dateTime
 
-  -- *** Originator
+  -- ** Originator
   , headerFrom
   , headerReplyTo
 
-  -- *** Destination Address
+  -- ** Destination Address
   , headerTo
   , headerCC
   , headerBCC
 
-  -- *** Informational
+  -- ** Identification
+  , headerMessageID
+  , headerInReplyTo
+  , headerReferences
+
+  -- ** Informational
   , headerSubject
 
-  -- *** Arbitrary headers
+  -- ** Arbitrary headers
   , headerText
 
-  -- ** Addresses
+  -- * Address types
   , Address(..)
   , address
   , addressList
@@ -134,7 +139,7 @@ import Control.Applicative
 import Data.Either (fromRight)
 import Data.Foldable (fold)
 import Data.List (findIndex, intersperse)
-import Data.List.NonEmpty (intersperse)
+import Data.List.NonEmpty (NonEmpty, intersperse)
 import Data.Word (Word8)
 import GHC.Generics (Generic)
 
@@ -156,9 +161,9 @@ import Data.Time (ZonedTime, defaultTimeLocale, formatTime)
 import Data.RFC5322.Internal
   ( CI, ci, original
   , (<<>>), foldMany, foldMany1Sep
-  , fromChar, isAtext, isQtext, isVchar, isWsp
+  , char, fromChar, isAtext, isQtext, isVchar, isWsp
   , optionalCFWS, word, wsp, vchar, optionalFWS, crlf
-  , domainLiteral, dotAtom, localPart, quotedString
+  , domainLiteral, dotAtom, dotAtomText, localPart, quotedString
   )
 import Data.RFC5322.DateTime (dateTime)
 import Data.RFC5322.Address.Types
@@ -409,6 +414,17 @@ headerSingleToList
 headerSingleToList f g k =
   headers . at k . iso (maybe [] f) (\l -> if null l then Nothing else Just (g l))
 
+-- | Map a single-occurrence header to a Maybe value.
+-- On read, absent header or parse failure maps to Nothing.
+-- On write, Nothing results in absent header.
+headerSingleToMaybe
+  :: (HasHeaders s)
+  => (B.ByteString -> Maybe a)
+  -> (a -> B.ByteString)
+  -> CI B.ByteString
+  -> Lens' s (Maybe a)
+headerSingleToMaybe f g k = headers . at k . iso (>>= f) (fmap g)
+
 headerAddressList :: (HasHeaders a) => CI B.ByteString -> CharsetLookup -> Lens' a [Address]
 headerAddressList k charsets = headerSingleToList
   (fromRight [] . parseOnly (addressList charsets))
@@ -423,6 +439,50 @@ headerReplyTo = headerAddressList "Reply-To"
 headerTo = headerAddressList "To"
 headerCC = headerAddressList "Cc"
 headerBCC = headerAddressList "Bcc"
+
+data MessageID = MessageID
+  (NonEmpty B.ByteString)
+  (Either (NonEmpty B.ByteString) B.ByteString)
+  deriving (Eq, Ord)
+
+parseMessageID :: Parser MessageID
+parseMessageID =
+  MessageID
+    <$> (optionalCFWS *> char '<'  *> idLeft) <* char '@'
+    <*> idRight <* char '>' <* optionalCFWS
+  where
+  idLeft = dotAtomText
+  idRight = Left <$> dotAtomText <|> Right <$> noFoldLiteral
+  noFoldLiteral = char '[' *> A.takeWhile1 isDtext <* char ']'
+
+buildMessageID :: MessageID -> Builder.Builder
+buildMessageID (MessageID l r) =
+  "<" <> buildDotAtom l <> "@" <> either buildDotAtom buildNoFoldLit r <> ">"
+  where
+  buildDotAtom =
+    fold . Data.List.NonEmpty.intersperse "." . fmap Builder.byteString
+  buildNoFoldLit s =
+    "[" <> Builder.byteString s <> "]"
+
+renderMessageID :: MessageID -> B.ByteString
+renderMessageID = L.toStrict . Builder.toLazyByteString . buildMessageID
+
+headerMessageID :: (HasHeaders a) => Lens' a (Maybe MessageID)
+headerMessageID = headerSingleToMaybe
+  (either (const Nothing) Just . parseOnly (parseMessageID <* endOfInput))
+  renderMessageID
+  "Message-ID"
+
+headerMessageIDList :: (HasHeaders a) => CI B.ByteString -> Lens' a [MessageID]
+headerMessageIDList = headerSingleToList
+  (fromRight [] . parseOnly (many parseMessageID <* endOfInput))
+  ( L.toStrict . Builder.toLazyByteString
+    . fold . Data.List.intersperse " " . fmap buildMessageID )
+
+headerInReplyTo, headerReferences :: (HasHeaders a) => Lens' a [MessageID]
+headerInReplyTo = headerMessageIDList "In-Reply-To"
+headerReferences = headerMessageIDList "References"
+
 
 -- | Single-valued header with @Text@ value via encoded-words.
 -- The conversion to/from Text is total (encoded-words that failed to be
