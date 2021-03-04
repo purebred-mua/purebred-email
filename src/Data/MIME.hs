@@ -845,7 +845,7 @@ createMultipartMixedMessage
     -> NonEmpty MIMEMessage -- ^ parts
     -> MIMEMessage
 createMultipartMixedMessage b attachments' =
-    let hdrs = mempty &
+    let hdrs = Headers [] &
                 set contentType (contentTypeMultipartMixed b)
     in Message hdrs (Multipart attachments')
 
@@ -856,7 +856,7 @@ createTextPlainMessage s = fmap Part $ transferEncode $ charsetEncode msg
   where
   msg = Message hdrs s :: TextEntity
   cd = ContentDisposition Inline mempty
-  hdrs = mempty
+  hdrs = Headers []
           & set contentType contentTypeTextPlain
           & set contentDisposition (Just cd)
 
@@ -876,7 +876,7 @@ createAttachment ct fp s = Part <$> transferEncode msg
   msg = Message hdrs s
   cd = ContentDisposition Attachment cdParams
   cdParams = mempty & set filenameParameter (newParameter <$> fp)
-  hdrs = mempty
+  hdrs = Headers []
           & set contentType ct
           & set contentDisposition (Just cd)
 
@@ -886,4 +886,4 @@ createAttachment ct fp s = Part <$> transferEncode msg
 encapsulate :: MIMEMessage -> MIMEMessage
 encapsulate = Message hdrs . Encapsulated
   where
-  hdrs = mempty & set contentType "message/rfc822"
+  hdrs = Headers [] & set contentType "message/rfc822"
