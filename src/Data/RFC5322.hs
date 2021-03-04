@@ -70,6 +70,10 @@ module Data.RFC5322
   , body
   , EqMessage(..)
 
+  -- * Replying
+  , ReplyMode(..)
+  , reply
+
   -- * Headers
   , Header
   , HasHeaders(..)
@@ -145,7 +149,7 @@ module Data.RFC5322
 
 import Control.Applicative
 import Data.Either (fromRight)
-import Data.Foldable (fold)
+import Data.Foldable (fold, toList)
 import Data.List (findIndex, intersperse)
 import Data.List.NonEmpty (NonEmpty, intersperse)
 import Data.Word (Word8)
@@ -167,7 +171,7 @@ import qualified Data.Text.Encoding as T
 import Data.Time (ZonedTime, defaultTimeLocale, formatTime)
 
 import Data.RFC5322.Internal
-  ( CI, ci, original
+  ( CI, ci, mk, original
   , (<<>>), foldMany, foldMany1Sep
   , char, fromChar, isAtext, isQtext, isVchar, isWsp
   , optionalCFWS, word, wsp, vchar, optionalFWS, crlf
@@ -507,6 +511,105 @@ headerText charsets k =
 -- | Subject header.  See 'headerText' for details of conversion to @Text@.
 headerSubject :: (HasHeaders a) => CharsetLookup -> Lens' a (Maybe T.Text)
 headerSubject charsets = headerText charsets "Subject"
+
+
+{- Replying -}
+
+-- | Specify how to choose recipients when replying.
+--
+-- __TODO__: "list reply" mode
+--
+data ReplyMode
+  = SenderReply
+  -- ^ Reply to the sender of the email only, or @Reply-To@ header if set.
+  | GroupReply
+  -- ^ Reply to sender and @Cc@ all other recipients of the original message.
+
+replyRecipients
+  :: CharsetLookup -> ReplyMode -> Message ctx a -> ([Address], [Address])
+replyRecipients charsets mode msg =
+  let
+    rt = view (headerReplyTo charsets) msg
+    f = view (headerFrom charsets) msg
+    t = view (headerTo charsets) msg
+    c = view (headerCC charsets) msg
+  in case mode of
+    SenderReply
+      | not (null rt) -> (rt, [])
+      | otherwise     -> (f, [])
+    GroupReply
+      | length (t <> c) <= 1  -> replyRecipients charsets SenderReply msg
+      | otherwise             -> (f, t <> c)
+
+replyReferences :: Message ctx a -> [MessageID]
+replyReferences msg
+  | null refer, length inRep == 1 = inRep <> msgId
+  | otherwise                     = refer <> msgId
+  where
+  msgId = toList $ view headerMessageID msg
+  refer = view headerReferences msg
+  inRep = view headerInReplyTo msg
+
+replySubject :: CharsetLookup -> Message ctx a -> T.Text
+replySubject charsets msg = if prefixed then orig else "Re: " <> orig
+  where
+  orig = fold $ view (headerSubject charsets) msg
+  prefixed = mk (T.take 3 orig) == "Re:"
+
+
+-- | Construct a reply to a 'Message', according to the specified
+-- 'ReplyMode' and following the requirements and suggestions of RFC
+-- 5322.  In particular:
+--
+-- * Sets @In-Reply-To@ to the @Message-ID@ of the parent message.
+--
+-- * Sets the @References@ header, following the requirements in RFC
+-- 5322 §3.6.4.
+--
+-- * Sets the @Subject@ by prepending @"Re: "@ to the parent
+-- subject, unless it already has such a prefix (case-insensitive
+-- match).  This is the scheme suggested in RFC 5322 §3.6.5.
+--
+-- * Sets the @From@ header to the given @['Mailbox']@.
+--
+-- * Sets @To@ and @Cc@ according to the 'ReplyMode'.  These headers
+-- are described in RFC 5322 §3.6.3.
+--
+--     * In 'SenderReply' mode, the @To@ header of the reply will
+--     contain the addresses from the @Reply-To@ header if it is
+--     present, otherwise it will contain the addresses from the
+--     @From@ header.
+--
+--     * In 'GroupReply' mode, if the parent message has only one
+--     recipient (in both the @To@ and @Cc@ headers), the behaviour
+--     is the same as 'SenderReply' mode (@Reply-To@ is respected).
+--     If the parent message has multiple recipients, the
+--     @Reply-To@ header is ignored, the @To@ header of the reply
+--     will contain the addresses from the @From@ header, and the
+--     @Cc@ header of the reply will contain the addresses from the
+--     @To@ and @Cc@ headers.
+--
+-- __TODO__: exclude "self" from recipients?
+--
+reply
+  :: CharsetLookup
+  -> ReplyMode
+  -> [Mailbox]
+  -> Message ctx a
+  -> Message ctx ()
+reply charsets mode _From msg =
+  let
+    (_To, _Cc) = replyRecipients charsets mode msg
+    hdrs = Headers []
+      & set (headerFrom charsets) (Single <$> _From)
+      & set (headerTo charsets) _To
+      & set (headerCC charsets) _Cc
+      & set headerInReplyTo (toList $ view headerMessageID msg)
+      & set headerReferences (replyReferences msg)
+      & set (headerSubject charsets) (Just $ replySubject charsets msg)
+  in
+    Message hdrs ()
+
 
 -- §3.5.  Overall Message Syntax
 

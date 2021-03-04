@@ -10,6 +10,7 @@ module Data.RFC5322.Internal
   -- * Case-insensitive value parsers
     ci
   , CI
+  , mk
   , original
 
   -- * Abstract character parsers
