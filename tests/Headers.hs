@@ -40,7 +40,7 @@ unittests = testGroup "Headers"
   , ixAndAt
   , contentTypeTests
   , parameterTests
-  , testReferencesField
+  , testReply
   , testFromToCcBccOptics
   , testProperty "field rendering round-trip" prop_renderHeadersRoundtrip
   , testProperty "folded fields no longer than 78 chars" prop_foldedUnstructuredLimited
@@ -49,9 +49,6 @@ unittests = testGroup "Headers"
 testFromToCcBccOptics :: TestTree
 testFromToCcBccOptics = testGroup "headerFrom/To/Cc/Bcc tests" $
   let
-    alice = Mailbox Nothing (AddrSpec "alice" (DomainDotAtom ("example" :| ["com"])))
-    bob = Mailbox Nothing (AddrSpec "bob" (DomainDotAtom ("example" :| ["com"])))
-    carol = Mailbox Nothing (AddrSpec "carol" (DomainDotAtom ("example" :| ["com"])))
     msg = createTextPlainMessage "hi"
     fromAlice = set (headerFrom defaultCharsets) [Single alice] msg
     fromAliceToBob = set (headerTo defaultCharsets) [Single bob] fromAlice
@@ -285,42 +282,78 @@ parameterTests = testGroup "parameter handling"
       @?= Headers [("Content-Disposition", "attachment; foo=bar")]
   ]
 
--- RFC5322 - 3.6.4. Identification Fields
-testReferencesField :: TestTree
-testReferencesField =
-  testGroup "references field in reply" $
-  (\(desc, hdrs, expected) ->
-     testCase desc $ expected @=? view replyHeaderReferences hdrs) <$>
-  fixtures
+-- Test the 'reply' function
+testReply :: TestTree
+testReply =
+  testGroup "test 'reply' function" $
+    [ testCase "Message-ID -> In-Reply-To" $
+        view headerInReplyTo rep1 @?= [msg1ID]
+    , testCase "Message-Id -> References" $
+        view headerReferences rep1 @?= [msg1ID]
+    , testCase "References + Message-Id -> References" $
+        view headerReferences rep2 @?= [msg1ID, rep1ID]
+    , testCase "In-Reply-To (no References) + Message-Id -> References" $
+        view headerReferences rep_noRef_IRT @?= [msg1ID, rep1ID]
+    , testCase "multi In-Reply-To (no Ref) + Message-Id -> Ref = [msgid]" $
+        view headerReferences rep_noRef_2IRT @?= [rep1ID]
+
+    , testCase "prepends 'Re: ' to Subject" $
+        view (headerSubject defaultCharsets) rep1
+          @?= Just "Re: Hello, world!"
+    , testCase "doesn't prepend 'Re: ' if already a prefix" $
+        view (headerSubject defaultCharsets) rep2
+          @?= Just "Re: Hello, world!"
+
+    , testCase "GroupReply" $ do
+        view (headerFrom defaultCharsets) msg1
+          @=? view (headerTo defaultCharsets) rep1
+        let cc = view (headerCC defaultCharsets) rep1
+        assertBool "To -> Cc" $ Single carol `elem` cc
+        assertBool "Cc -> Cc" $ Single frank `elem` cc
+
+    , testCase "SingleReply" $ do
+        view (headerFrom defaultCharsets) rep1
+          @=? view (headerTo defaultCharsets) rep2
+        view (headerCC defaultCharsets) rep2 @=? []
+
+    , testCase "Reply-To -> To" $
+        view (headerTo defaultCharsets) rep_ReplyTo @?= [Single frank]
+    ]
   where
-    fixtures =
-      [ ("no ident fields", empty, Nothing)
-      , ( "messageid only"
-        , empty & set (at "message-id") (Just "asdf")
-        , Just "asdf")
-      , ( "references only"
-        , empty & set (at "references") (Just "references")
-        , Just "references")
-      , ( "references & message id"
-        , empty &
-          set (at "references") (Just "references") .
-          set (at "message-id") (Just "messageid")
-        , Just "references messageid")
-      , ( "in-reply-to and no references"
-        , empty & set (at "in-reply-to") (Just "replyto")
-        , Just "replyto")
-      , ( "in-reply-to and message-id"
-        , empty &
-          set (at "in-reply-to") (Just "replyto") .
-          set (at "message-id") (Just "message-id")
-        , Just "replyto message-id")
-      , ( "in-reply-to and references"
-        , empty &
-          set (at "in-reply-to") (Just "replyto") .
-          set (at "references") (Just "references") .
-          set (at "message-id") (Just "messageid")
-        , Just "references messageid")
-      ]
+    extraMsgId = (\(Right a) -> a) $ parseOnly parseMessageID "<extra@host>"
+
+    msg1ID = (\(Right a) -> a) $ parseOnly parseMessageID "<msg1@host>"
+    msg1 = createTextPlainMessage "hello, world!"
+      & set headerMessageID (Just msg1ID)
+      . set (headerSubject defaultCharsets) (Just "Hello, world!")
+      . set (headerFrom defaultCharsets) [Single alice]
+      . set (headerTo defaultCharsets) [Single bob, Single carol]
+      . set (headerCC defaultCharsets) [Single frank]
+
+    rep1ID = (\(Right a) -> a) $ parseOnly parseMessageID "<rep1@host>"
+    rep1 = reply defaultCharsets GroupReply [bob] msg1
+      & set headerMessageID (Just rep1ID)
+
+    rep2ID = (\(Right a) -> a) $ parseOnly parseMessageID "<rep2@host>"
+    rep2 = reply defaultCharsets SenderReply [carol] rep1
+      & set headerMessageID (Just rep2ID)
+
+    -- reply to a message with no References + single-valued In-Reply_To
+    rep_noRef_IRT =
+      reply defaultCharsets SenderReply [carol] (set headerReferences [] rep1)
+
+    -- reply to a message with no References + multi-valued In-Reply_To
+    rep_noRef_2IRT =
+      reply defaultCharsets SenderReply [carol] $
+        rep1
+          & set headerReferences []
+          & over headerInReplyTo (extraMsgId:)
+
+    -- reply to a message with Reply-To header set
+    rep_ReplyTo =
+      reply defaultCharsets SenderReply [bob]
+        (set (headerReplyTo defaultCharsets) [Single frank] msg1)
+
 
 -- | Generate headers
 genFieldItem :: Gen B.ByteString
@@ -362,3 +395,13 @@ crlfLines = go ""
         ""      -> [acc <> h]
         "\r\n"  -> acc <> h : go "" (L.drop 2 t)
         _       -> go (acc <> h <> L.take 1 t) (L.drop 1 t)
+
+at_example_com :: B.ByteString -> Mailbox
+at_example_com localPart =
+  Mailbox Nothing (AddrSpec localPart (DomainDotAtom ("example" :| ["com"])))
+
+alice, bob, carol, frank :: Mailbox
+alice = at_example_com "alice"
+bob = at_example_com "bob"
+carol = at_example_com "carol"
+frank = at_example_com "frank"

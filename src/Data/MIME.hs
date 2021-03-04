@@ -88,9 +88,6 @@ module Data.MIME
   , createAttachment
   , createAttachmentFromFile
   , createMultipartMixedMessage
-
-  -- *** Reply
-  , replyHeaderReferences
   , setTextPlainBody
 
   -- *** Forward
@@ -107,7 +104,7 @@ module Data.MIME
 import Control.Applicative
 import Data.Foldable (fold)
 import Data.List.NonEmpty (NonEmpty, fromList, intersperse)
-import Data.Maybe (fromMaybe, catMaybes)
+import Data.Maybe (fromMaybe)
 import Data.String (IsString(fromString))
 import GHC.Generics (Generic)
 
@@ -816,27 +813,6 @@ instance RenderMessage MIME where
         <> fold (intersperse ("\r\n" <> boundary <> "\r\n") (fmap buildMessage xs))
         <> "\r\n" <> boundary <> "--\r\n"
     FailedParse _ bs -> Builder.byteString bs
-
-
--- | Returns a space delimited `B.ByteString` with values from identification
--- fields from the parents message `Headers`. Rules to gather the values are in
--- accordance to RFC5322 - 3.6.4 as follows sorted by priority (first has
--- precedence):
---
--- * Values from @References@ and @Message-ID@ (if any)
--- * Values from @In-Reply-To@ and @Message-ID@ (if any)
--- * Value from @Message-ID@ (in case it's the first reply to a parent mail)
--- * Otherwise @Nothing@ is returned indicating that the replying mail should
---   not have a @References@ field.
---
-replyHeaderReferences :: HasHeaders a => Getter a (Maybe C8.ByteString)
-replyHeaderReferences = (.) headers $ to $ \hdrs ->
-  let xs = catMaybes
-        [preview (header "references") hdrs
-         <|> preview (header "in-reply-to") hdrs
-        , preview (header "message-id") hdrs
-        ]
-  in if null xs then Nothing else Just (B.intercalate " " xs)
 
 -- | Create a mixed `MIMEMessage` with an inline text/plain part and multiple
 -- `attachments`
