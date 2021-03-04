@@ -26,7 +26,7 @@ import qualified Data.Text.Encoding as T
 import qualified Data.Text.Lazy as LT
 import qualified Data.Text.Internal.Builder as Builder
 import qualified Data.ByteString as B
-import Data.Attoparsec.Text as A hiding (parse, take)
+import Data.Attoparsec.Text as A hiding (char, parse, take)
 import Data.List.NonEmpty (intersperse)
 
 import Data.MIME.Charset (decodeLenient)

@@ -21,10 +21,12 @@ module Data.RFC5322.Internal
   , vchar
   , word
   , quotedString
+  , dotAtomText
   , dotAtom
   , localPart
   , domainLiteral
   , IsChar(..)
+  , char
   , CharParsing(..)
   , SM
 
