@@ -91,6 +91,7 @@ module Data.MIME
 
   -- *** Reply
   , replyHeaderReferences
+  , setTextPlainBody
 
   -- *** Forward
   , encapsulate
@@ -852,13 +853,18 @@ createMultipartMixedMessage b attachments' =
 -- | Create an inline, text/plain, utf-8 encoded message
 --
 createTextPlainMessage :: T.Text -> MIMEMessage
-createTextPlainMessage s = fmap Part $ transferEncode $ charsetEncode msg
-  where
-  msg = Message hdrs s :: TextEntity
-  cd = ContentDisposition Inline mempty
-  hdrs = Headers []
-          & set contentType contentTypeTextPlain
-          & set contentDisposition (Just cd)
+createTextPlainMessage s = setTextPlainBody s (Message (Headers []) ())
+
+-- | Set an inline, @text/plain@, utf-8 encoded message body
+--
+setTextPlainBody :: T.Text -> Message ctx a -> MIMEMessage
+setTextPlainBody s =
+  fmap Part
+  . transferEncode
+  . charsetEncode
+  . set contentDisposition (Just $ ContentDisposition Inline mempty)
+  . set contentType contentTypeTextPlain
+  . set body s
 
 -- | Create an attachment from a given file path.
 -- Note: The filename content disposition is set to the given `FilePath`. For
