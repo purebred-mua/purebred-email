@@ -384,7 +384,8 @@ buildAddressSpec (AddrSpec lp (DomainDotAtom b))
   | otherwise = buildLP <> rest
   where
     buildLP = Builder.byteString lp
-    rest = "@" <> foldMap Builder.byteString (Data.List.NonEmpty.intersperse "." b)
+    rest = "@" <> foldMap (Builder.byteString . original)
+                          (Data.List.NonEmpty.intersperse "." b)
 buildAddressSpec (AddrSpec lp (DomainLiteral b)) =
   foldMap Builder.byteString [lp, "@", b]
 
@@ -399,7 +400,7 @@ isDtext :: Word8 -> Bool
 isDtext c = (c >= 33 && c <= 90) || (c >= 94 && c <= 126)
 
 domain :: Parser Domain
-domain = (DomainDotAtom <$> dotAtom)
+domain = (DomainDotAtom . fmap mk <$> dotAtom)
          <|> (DomainLiteral <$> domainLiteral)
 
 mailboxList :: CharsetLookup -> Parser [Mailbox]
