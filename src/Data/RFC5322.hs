@@ -71,8 +71,19 @@ module Data.RFC5322
   , EqMessage(..)
 
   -- * Replying
-  , ReplyMode(..)
   , reply
+  , ReplySettings(ReplySettings)
+  , defaultReplySettings
+  , ReplyMode(..)
+  , ReplyFromMode(..)
+  , ReplyFromRewriteMode(..)
+  , SelfInRecipientsMode(..)
+  , AuthorMailboxes
+  , replyMode
+  , replyFromMode
+  , replyFromRewriteMode
+  , selfInRecipientsMode
+  , authorMailboxes
 
   -- * Headers
   , Header
@@ -151,7 +162,7 @@ import Control.Applicative
 import Data.Either (fromRight)
 import Data.Foldable (fold, toList)
 import Data.List (findIndex, intersperse)
-import Data.List.NonEmpty (NonEmpty, intersperse)
+import Data.List.NonEmpty (NonEmpty((:|)), intersperse)
 import Data.Word (Word8)
 import GHC.Generics (Generic)
 
@@ -520,26 +531,95 @@ headerSubject charsets = headerText charsets "Subject"
 -- __TODO__: "list reply" mode
 --
 data ReplyMode
-  = SenderReply
+  = ReplyToSender
   -- ^ Reply to the sender of the email only, or @Reply-To@ header if set.
-  | GroupReply
+  | ReplyToGroup
   -- ^ Reply to sender and @Cc@ all other recipients of the original message.
 
+-- | The mailboxes of the entity authoring the reply.
+-- The first mailbox is the "preferred" mailbox.
+type AuthorMailboxes = NonEmpty Mailbox
+
+-- | How to choose the @From@ address.
+data ReplyFromMode
+  = ReplyFromPreferredMailbox
+  -- ^ Always reply @From@ the preferred mailbox
+  | ReplyFromMatchingMailbox
+  -- ^ Reply from whichever author mailbox is a recipient of the
+  -- parent message, or the preferred mailbox if none of the author
+  -- mailboxes is a visible recipient of the parent message.
+
+-- | Whether to use the @From@ address as it appears in the parent
+-- message, or as it appears in the 'AuthorMailboxes'.
+--
+data ReplyFromRewriteMode
+  = ReplyFromRewriteOff
+  -- ^ Use the @From@ mailbox as it appears in the original message.
+  | ReplyFromRewriteOn
+  -- ^ Use the @From@ mailbox as it appears in the author mailboxes.
+
+data SelfInRecipientsMode
+  = SelfInRecipientsRemove
+  -- ^ Remove author mailbox from list of recipients when replying.
+  | SelfInRecipientsIgnore
+  -- ^ If author mailbox appears in list of recipients, leave it there.
+
+-- | All the settings to control how to construct a reply to a message.
+data ReplySettings = ReplySettings
+  { _replyMode            :: ReplyMode
+  , _replyFromMode        :: ReplyFromMode
+  , _replyFromRewriteMode :: ReplyFromRewriteMode
+  , _selfInRecipientsMode :: SelfInRecipientsMode
+  , _authorMailboxes      :: AuthorMailboxes
+  }
+
+-- | Given author mailboxes, get a default 'ReplySettings'.  The default
+-- settings are: 'ReplyToSender', 'ReplyFromMatchingMailbox',
+-- 'ReplyFromRewriteOn', and 'SelfInRecipientsRemove'.
+--
+defaultReplySettings :: AuthorMailboxes -> ReplySettings
+defaultReplySettings = ReplySettings
+  ReplyToSender
+  ReplyFromMatchingMailbox
+  ReplyFromRewriteOn
+  SelfInRecipientsRemove
+
+replyMode :: Lens' ReplySettings ReplyMode
+replyMode = lens _replyMode (\s a -> s { _replyMode = a })
+
+replyFromMode :: Lens' ReplySettings ReplyFromMode
+replyFromMode = lens _replyFromMode (\s a -> s { _replyFromMode = a })
+
+replyFromRewriteMode :: Lens' ReplySettings ReplyFromRewriteMode
+replyFromRewriteMode =
+  lens _replyFromRewriteMode (\s a -> s { _replyFromRewriteMode = a })
+
+selfInRecipientsMode :: Lens' ReplySettings SelfInRecipientsMode
+selfInRecipientsMode =
+  lens _selfInRecipientsMode (\s a -> s { _selfInRecipientsMode = a })
+
+authorMailboxes :: Lens' ReplySettings AuthorMailboxes
+authorMailboxes = lens _authorMailboxes (\s a -> s { _authorMailboxes = a })
+
+
 replyRecipients
-  :: CharsetLookup -> ReplyMode -> Message ctx a -> ([Address], [Address])
-replyRecipients charsets mode msg =
+  :: CharsetLookup -> ReplySettings -> Message ctx a -> ([Address], [Address])
+replyRecipients charsets settings msg =
   let
+    mode = view replyMode settings
     rt = view (headerReplyTo charsets) msg
     f = view (headerFrom charsets) msg
     t = view (headerTo charsets) msg
     c = view (headerCC charsets) msg
   in case mode of
-    SenderReply
+    ReplyToSender
       | not (null rt) -> (rt, [])
       | otherwise     -> (f, [])
-    GroupReply
-      | length (t <> c) <= 1  -> replyRecipients charsets SenderReply msg
-      | otherwise             -> (f, t <> c)
+    ReplyToGroup
+      | length (t <> c) <= 1
+      -> replyRecipients charsets (set replyMode ReplyToSender settings) msg
+      | otherwise
+      -> (f, t <> c)
 
 replyReferences :: Message ctx a -> [MessageID]
 replyReferences msg
@@ -558,8 +638,8 @@ replySubject charsets msg = if prefixed then orig else "Re: " <> orig
 
 
 -- | Construct a reply to a 'Message', according to the specified
--- 'ReplyMode' and following the requirements and suggestions of RFC
--- 5322.  In particular:
+-- 'ReplySettings' and following the requirements and suggestions of
+-- RFC 5322.  In particular:
 --
 -- * Sets @In-Reply-To@ to the @Message-ID@ of the parent message.
 --
@@ -575,33 +655,34 @@ replySubject charsets msg = if prefixed then orig else "Re: " <> orig
 -- * Sets @To@ and @Cc@ according to the 'ReplyMode'.  These headers
 -- are described in RFC 5322 §3.6.3.
 --
---     * In 'SenderReply' mode, the @To@ header of the reply will
+--     * In 'ReplyToSender' mode, the @To@ header of the reply will
 --     contain the addresses from the @Reply-To@ header if it is
 --     present, otherwise it will contain the addresses from the
 --     @From@ header.
 --
---     * In 'GroupReply' mode, if the parent message has only one
---     recipient (in both the @To@ and @Cc@ headers), the behaviour
---     is the same as 'SenderReply' mode (@Reply-To@ is respected).
+--     * In 'ReplyToGroup' mode, if the parent message has only one
+--     recipient (across the @To@ and @Cc@ headers), the behaviour
+--     is the same as 'ReplyToSender' mode (@Reply-To@ is respected).
 --     If the parent message has multiple recipients, the
 --     @Reply-To@ header is ignored, the @To@ header of the reply
 --     will contain the addresses from the @From@ header, and the
 --     @Cc@ header of the reply will contain the addresses from the
 --     @To@ and @Cc@ headers.
 --
--- __TODO__: exclude "self" from recipients?
+-- __TODO__: Apart from 'ReplyMode' and the head of the author
+-- mailbox list, none of the 'ReplySettings' do anything yet.
 --
 reply
   :: CharsetLookup
-  -> ReplyMode
-  -> [Mailbox]
+  -> ReplySettings
   -> Message ctx a
   -> Message ctx ()
-reply charsets mode _From msg =
+reply charsets settings msg =
   let
-    (_To, _Cc) = replyRecipients charsets mode msg
+    (_To, _Cc) = replyRecipients charsets settings msg
+    _From :| _ = view authorMailboxes settings
     hdrs = Headers []
-      & set (headerFrom charsets) (Single <$> _From)
+      & set (headerFrom charsets) [Single _From]
       & set (headerTo charsets) _To
       & set (headerCC charsets) _Cc
       & set headerInReplyTo (toList $ view headerMessageID msg)
