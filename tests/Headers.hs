@@ -320,6 +320,14 @@ testReply =
         view (headerTo defaultCharsets) rep_ReplyTo @?= [Single frank]
     ]
   where
+    mkSettings = ReplySettings
+      ReplyToSender
+      ReplyFromMatchingMailbox
+      ReplyFromRewriteOn
+      SelfInRecipientsRemove
+    bobSettings   = mkSettings (pure bob) & set replyMode ReplyToGroup
+    carolSettings = mkSettings (pure carol)
+
     extraMsgId = (\(Right a) -> a) $ parseOnly parseMessageID "<extra@host>"
 
     msg1ID = (\(Right a) -> a) $ parseOnly parseMessageID "<msg1@host>"
@@ -331,27 +339,27 @@ testReply =
       . set (headerCC defaultCharsets) [Single frank]
 
     rep1ID = (\(Right a) -> a) $ parseOnly parseMessageID "<rep1@host>"
-    rep1 = reply defaultCharsets GroupReply [bob] msg1
+    rep1 = reply defaultCharsets bobSettings msg1
       & set headerMessageID (Just rep1ID)
 
     rep2ID = (\(Right a) -> a) $ parseOnly parseMessageID "<rep2@host>"
-    rep2 = reply defaultCharsets SenderReply [carol] rep1
+    rep2 = reply defaultCharsets carolSettings rep1
       & set headerMessageID (Just rep2ID)
 
     -- reply to a message with no References + single-valued In-Reply_To
     rep_noRef_IRT =
-      reply defaultCharsets SenderReply [carol] (set headerReferences [] rep1)
+      reply defaultCharsets carolSettings (set headerReferences [] rep1)
 
     -- reply to a message with no References + multi-valued In-Reply_To
     rep_noRef_2IRT =
-      reply defaultCharsets SenderReply [carol] $
+      reply defaultCharsets carolSettings $
         rep1
           & set headerReferences []
           & over headerInReplyTo (extraMsgId:)
 
     -- reply to a message with Reply-To header set
     rep_ReplyTo =
-      reply defaultCharsets SenderReply [bob]
+      reply defaultCharsets carolSettings
         (set (headerReplyTo defaultCharsets) [Single frank] msg1)
 
 
