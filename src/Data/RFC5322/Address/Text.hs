@@ -19,6 +19,7 @@ module Data.RFC5322.Address.Text
   ) where
 
 import Control.Applicative ((<|>), optional)
+import Data.CaseInsensitive
 import Data.Foldable (fold)
 import Data.List (intersperse)
 import qualified Data.Text as T
@@ -63,7 +64,8 @@ buildAddressSpec (AddrSpec lp (DomainDotAtom b))
   | otherwise = buildLP <> rest
   where
     buildLP = Builder.fromText $ decodeLenient lp
-    rest = "@" <> foldMap Builder.fromText (decodeLenient <$> Data.List.NonEmpty.intersperse "." b)
+    rest = "@" <> foldMap (Builder.fromText . decodeLenient . original)
+                          (Data.List.NonEmpty.intersperse "." b)
 buildAddressSpec (AddrSpec lp (DomainLiteral b)) =
   foldMap Builder.fromText [decodeLenient lp, "@", decodeLenient b]
 
@@ -106,5 +108,5 @@ addressSpec :: Parser AddrSpec
 addressSpec = AddrSpec <$> (T.encodeUtf8 <$> localPart) <*> (char '@' *> domain)
 
 domain :: Parser Domain
-domain = (DomainDotAtom . fmap T.encodeUtf8 <$> dotAtom)
+domain = (DomainDotAtom . fmap (mk . T.encodeUtf8) <$> dotAtom)
          <|> (DomainLiteral . T.encodeUtf8 <$> domainLiteral)

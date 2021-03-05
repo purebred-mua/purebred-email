@@ -31,6 +31,7 @@ import Data.List.NonEmpty (NonEmpty(..), intersperse)
 
 import Control.Lens (set, view)
 import qualified Data.ByteString as B
+import Data.CaseInsensitive
 import qualified Data.Text as T
 
 import Test.Tasty
@@ -110,7 +111,7 @@ prop_messageFromRoundTrip = property $ do
   (view l <$> parse (message mime) (renderMessage msg)) === Right [from]
 
 genDomain :: Gen Domain
-genDomain = DomainDotAtom <$> genDotAtom -- TODO domain literal
+genDomain = DomainDotAtom . fmap mk <$> genDotAtom -- TODO domain literal
 
 genDotAtom :: Gen (NonEmpty B.ByteString)
 genDotAtom = Gen.nonEmpty (Range.linear 1 5) (Gen.utf8 (Range.linear 1 20) (Gen.filter isAtext Gen.ascii))
