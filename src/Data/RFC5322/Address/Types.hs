@@ -10,12 +10,15 @@ module Data.RFC5322.Address.Types
   ) where
 
 import Control.DeepSeq (NFData)
+import Data.String (IsString(..))
 import qualified Data.Text as T
 import qualified Data.ByteString as B
 import Data.List.NonEmpty (NonEmpty)
 import GHC.Generics (Generic)
 
 import Data.CaseInsensitive
+
+import {-# SOURCE #-} Data.RFC5322.Address.Text (readMailbox)
 
 -- | Email address with optional display name.
 -- The @Eq@ instance compares the display name case
@@ -25,6 +28,10 @@ data Mailbox =
     Mailbox (Maybe T.Text {- display name -})
              AddrSpec
     deriving (Show, Eq, Generic, NFData)
+
+instance IsString Mailbox where
+  fromString =
+    either (error . mappend "Failed to parse Mailbox: ") id . readMailbox
 
 -- | Email address.  The @Eq@ instances compares the local part
 -- case sensitively, and the domain part as described at 'Domain'.

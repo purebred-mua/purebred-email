@@ -8,6 +8,7 @@ module Data.RFC5322.Address.Text
   (
     mailbox
   , mailboxList
+  , readMailbox
   , address
   , addressList
   -- * Pretty printing
@@ -77,6 +78,10 @@ renderAddressSpec = LT.toStrict . Builder.toLazyText . buildAddressSpec
 mailbox :: Parser Mailbox
 mailbox = Mailbox <$> optional displayName <*> angleAddr
           <|> Mailbox Nothing <$> addressSpec
+
+-- | Parse a (whole) string, returning an error @String@ or a 'Mailbox'.
+readMailbox :: String -> Either String Mailbox
+readMailbox = parseOnly (mailbox <* endOfInput) . T.pack
 
 -- | Version of 'phrase' that does not process encoded-word
 -- (we are parsing Text so will assume that the input does not

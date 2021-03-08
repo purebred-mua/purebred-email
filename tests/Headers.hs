@@ -404,12 +404,8 @@ crlfLines = go ""
         "\r\n"  -> acc <> h : go "" (L.drop 2 t)
         _       -> go (acc <> h <> L.take 1 t) (L.drop 1 t)
 
-at_example_com :: B.ByteString -> Mailbox
-at_example_com localPart =
-  Mailbox Nothing (AddrSpec localPart (DomainDotAtom ("example" :| ["com"])))
-
 alice, bob, carol, frank :: Mailbox
-alice = at_example_com "alice"
-bob = at_example_com "bob"
-carol = at_example_com "carol"
-frank = at_example_com "frank"
+alice = "alice@example.com"
+bob = "bob@example.com"
+carol = "carol@example.com"
+frank = "frank@example.com"
