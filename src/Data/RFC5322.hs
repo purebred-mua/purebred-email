@@ -161,6 +161,7 @@ module Data.RFC5322
 import Control.Applicative
 import Data.Either (fromRight)
 import Data.Foldable (fold, toList)
+import Data.Function (on)
 import Data.List (findIndex, intersperse)
 import Data.List.NonEmpty (NonEmpty((:|)), intersperse)
 import Data.Word (Word8)
@@ -653,8 +654,9 @@ replySubject charsets msg = if prefixed then orig else "Re: " <> orig
 --
 -- * Sets the @From@ header to the given @['Mailbox']@.
 --
--- * Sets @To@ and @Cc@ according to the 'ReplyMode'.  These headers
--- are described in RFC 5322 §3.6.3.
+-- * Sets @To@ and @Cc@ according to 'ReplyMode' and
+-- 'SelfInRecipientsMode'.  These headers are described in RFC 5322
+-- §3.6.3.
 --
 --     * In 'ReplyToSender' mode, the @To@ header of the reply will
 --     contain the addresses from the @Reply-To@ header if it is
@@ -670,8 +672,11 @@ replySubject charsets msg = if prefixed then orig else "Re: " <> orig
 --     @Cc@ header of the reply will contain the addresses from the
 --     @To@ and @Cc@ headers.
 --
--- __TODO__: Apart from 'ReplyMode' and the head of the author
--- mailbox list, none of the 'ReplySettings' do anything yet.
+--     * If the 'SelfInRecipientsMode' is 'SelfInRecipientsRemove',
+--     any of the 'authorMailboxes' will be removed from the @To@
+--     and @Cc@ headers.
+--
+-- __TODO__: implement 'ReplyFromMode' and 'ReplyFromRewriteMode'
 --
 reply
   :: CharsetLookup
@@ -680,12 +685,26 @@ reply
   -> Message ctx ()
 reply charsets settings msg =
   let
+    self = view authorMailboxes settings
+
+    getAddrSpec :: Mailbox -> AddrSpec
+    getAddrSpec (Mailbox _ addr) = addr
+
+    isSelf :: Address -> Bool
+    isSelf (Single mailbox) = any (on (==) getAddrSpec mailbox) self
+    isSelf                _ = False
+
+    filterSelf = case view selfInRecipientsMode settings of
+      SelfInRecipientsRemove -> filter (not . isSelf)
+      SelfInRecipientsIgnore -> id
+
     (_To, _Cc) = replyRecipients charsets settings msg
-    _From :| _ = view authorMailboxes settings
+    _From :| _ = self
+
     hdrs = Headers []
       & set (headerFrom charsets) [Single _From]
-      & set (headerTo charsets) _To
-      & set (headerCC charsets) _Cc
+      & set (headerTo charsets) (filterSelf _To)
+      & set (headerCC charsets) (filterSelf _Cc)
       & set headerInReplyTo (toList $ view headerMessageID msg)
       & set headerReferences (replyReferences msg)
       & set (headerSubject charsets) (Just $ replySubject charsets msg)

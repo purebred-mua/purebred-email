@@ -304,12 +304,21 @@ testReply =
         view (headerSubject defaultCharsets) rep2
           @?= Just "Re: Hello, world!"
 
-    , testCase "GroupReply" $ do
+    , testCase "GroupReply (remove self)" $ do
         view (headerFrom defaultCharsets) msg1
           @=? view (headerTo defaultCharsets) rep1
-        let cc = view (headerCC defaultCharsets) rep1
-        assertBool "To -> Cc" $ Single carol `elem` cc
-        assertBool "Cc -> Cc" $ Single frank `elem` cc
+        view (headerTo defaultCharsets) rep1
+          @?= [Single alice]
+        view (headerCC defaultCharsets) rep1
+          @?= [Single carol, Single frank]
+
+    , testCase "GroupReply (ignore self)" $ do
+        view (headerFrom defaultCharsets) msg1
+          @=? view (headerTo defaultCharsets) rep1'
+        view (headerTo defaultCharsets) rep1'
+          @?= [Single alice]
+        view (headerCC defaultCharsets) rep1'
+          @?= [Single bob, Single carol, Single frank]
 
     , testCase "SingleReply" $ do
         view (headerFrom defaultCharsets) rep1
@@ -341,6 +350,11 @@ testReply =
     rep1ID = (\(Right a) -> a) $ parseOnly parseMessageID "<rep1@host>"
     rep1 = reply defaultCharsets bobSettings msg1
       & set headerMessageID (Just rep1ID)
+    rep1' =  -- same as rep1, but with SelfInRecipientsIgnore
+      let bobSettings' =
+            bobSettings & set selfInRecipientsMode SelfInRecipientsIgnore
+      in reply defaultCharsets bobSettings' msg1
+          & set headerMessageID (Just rep1ID)
 
     rep2ID = (\(Right a) -> a) $ parseOnly parseMessageID "<rep2@host>"
     rep2 = reply defaultCharsets carolSettings rep1
