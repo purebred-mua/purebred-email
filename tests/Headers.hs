@@ -325,6 +325,18 @@ testReply =
           @=? view (headerTo defaultCharsets) rep2
         view (headerCC defaultCharsets) rep2 @=? []
 
+    , testCase "ReplyFromMatchingMailbox, ReplyFromRewriteOn" $ do
+        view (headerFrom defaultCharsets) rep2
+          @?= [Single carolWithDisplayName]
+
+    , testCase "ReplyFromMatchingMailbox, ReplyFromRewriteOff" $ do
+        view (headerFrom defaultCharsets) rep2'
+          @?= [Single carol]
+
+    , testCase "ReplyFromPreferredMailbox" $ do
+        view (headerFrom defaultCharsets) rep2''
+          @?= [Single "carol@unknown.example.org"]
+
     , testCase "Reply-To -> To" $
         view (headerTo defaultCharsets) rep_ReplyTo @?= [Single frank]
     ]
@@ -335,7 +347,8 @@ testReply =
       ReplyFromRewriteOn
       SelfInRecipientsRemove
     bobSettings   = mkSettings (pure bob) & set replyMode ReplyToGroup
-    carolSettings = mkSettings (pure carol)
+    carolSettings =
+      mkSettings ("carol@unknown.example.org" :| [carolWithDisplayName])
 
     extraMsgId = (\(Right a) -> a) $ parseOnly parseMessageID "<extra@host>"
 
@@ -359,6 +372,16 @@ testReply =
     rep2ID = (\(Right a) -> a) $ parseOnly parseMessageID "<rep2@host>"
     rep2 = reply defaultCharsets carolSettings rep1
       & set headerMessageID (Just rep2ID)
+    rep2' =  -- same as rep2, but with ReplyFromRewriteOff
+      let carolSettings' =
+            carolSettings & set replyFromRewriteMode ReplyFromRewriteOff
+      in reply defaultCharsets carolSettings' rep1
+          & set headerMessageID (Just rep2ID)
+    rep2'' = -- same as rep2, but with ReplyFromPreferredMailbox
+      let carolSettings' =
+            carolSettings & set replyFromMode ReplyFromPreferredMailbox
+      in reply defaultCharsets carolSettings' rep1
+          & set headerMessageID (Just rep2ID)
 
     -- reply to a message with no References + single-valued In-Reply_To
     rep_noRef_IRT =
@@ -418,8 +441,9 @@ crlfLines = go ""
         "\r\n"  -> acc <> h : go "" (L.drop 2 t)
         _       -> go (acc <> h <> L.take 1 t) (L.drop 1 t)
 
-alice, bob, carol, frank :: Mailbox
+alice, bob, carol, carolWithDisplayName, frank :: Mailbox
 alice = "alice@example.com"
 bob = "bob@example.com"
 carol = "carol@example.com"
+carolWithDisplayName = "Carol Charlie <carol@example.com>"
 frank = "frank@example.com"

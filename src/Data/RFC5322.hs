@@ -162,8 +162,10 @@ import Control.Applicative
 import Data.Either (fromRight)
 import Data.Foldable (fold, toList)
 import Data.Function (on)
-import Data.List (findIndex, intersperse)
-import Data.List.NonEmpty (NonEmpty((:|)), intersperse)
+import Data.List (find, findIndex, intersperse)
+import Data.List.NonEmpty (NonEmpty, head, intersperse)
+import Data.Maybe (fromMaybe, isJust)
+import Data.Monoid (First(..))
 import Data.Word (Word8)
 import GHC.Generics (Generic)
 
@@ -652,7 +654,15 @@ replySubject charsets msg = if prefixed then orig else "Re: " <> orig
 -- subject, unless it already has such a prefix (case-insensitive
 -- match).  This is the scheme suggested in RFC 5322 §3.6.5.
 --
--- * Sets the @From@ header to the given @['Mailbox']@.
+-- * Sets the @From@ header.  If the 'ReplyFromMode' is
+-- 'ReplyFromMatchingMailbox' and one of the 'authorMailboxes' is a
+-- recipient of the parent message, that address will be used as the
+-- @From@ address.  Also, if 'ReplyFromRewriteMode' is
+-- 'ReplyFromRewriteOn', the matching value in 'authorMailboxes'
+-- replaces the value from the parent message.  This can be used to
+-- rewrite a bare address to one with a display name (or
+-- vice-versa).  In all other cases the @From@ address will be the
+-- /preferred/ (first) author mailbox.
 --
 -- * Sets @To@ and @Cc@ according to 'ReplyMode' and
 -- 'SelfInRecipientsMode'.  These headers are described in RFC 5322
@@ -676,8 +686,6 @@ replySubject charsets msg = if prefixed then orig else "Re: " <> orig
 --     any of the 'authorMailboxes' will be removed from the @To@
 --     and @Cc@ headers.
 --
--- __TODO__: implement 'ReplyFromMode' and 'ReplyFromRewriteMode'
---
 reply
   :: CharsetLookup
   -> ReplySettings
@@ -690,16 +698,36 @@ reply charsets settings msg =
     getAddrSpec :: Mailbox -> AddrSpec
     getAddrSpec (Mailbox _ addr) = addr
 
+    getSelf :: Address -> Maybe Mailbox
+    getSelf (Single addr) =
+      f <$> find (on (==) getAddrSpec addr) self
+      where
+        f = case view replyFromRewriteMode settings of
+          ReplyFromRewriteOn  -> id
+          ReplyFromRewriteOff -> const addr
+    getSelf _ = Nothing
+
     isSelf :: Address -> Bool
-    isSelf (Single mailbox) = any (on (==) getAddrSpec mailbox) self
-    isSelf                _ = False
+    isSelf = isJust . getSelf
+
+    findSelf =
+      let
+        parentTo = view (headerTo charsets) msg
+        parentCc = view (headerCC charsets) msg
+      in
+        getFirst $ foldMap (First . getSelf) (parentTo <> parentCc)
 
     filterSelf = case view selfInRecipientsMode settings of
       SelfInRecipientsRemove -> filter (not . isSelf)
       SelfInRecipientsIgnore -> id
 
     (_To, _Cc) = replyRecipients charsets settings msg
-    _From :| _ = self
+    _From =
+      let preferred = Data.List.NonEmpty.head self
+      in
+        case view replyFromMode settings of
+          ReplyFromPreferredMailbox -> preferred
+          ReplyFromMatchingMailbox  -> fromMaybe preferred findSelf
 
     hdrs = Headers []
       & set (headerFrom charsets) [Single _From]
