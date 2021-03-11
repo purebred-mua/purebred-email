@@ -3,6 +3,7 @@
 {-# LANGUAGE DeriveAnyClass #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
@@ -164,7 +165,7 @@ import Data.Foldable (fold, toList)
 import Data.Function (on)
 import Data.List (find, findIndex, intersperse)
 import Data.List.NonEmpty (NonEmpty, head, intersperse)
-import Data.Maybe (fromMaybe, isJust)
+import Data.Maybe (fromMaybe, isJust, isNothing, mapMaybe)
 import Data.Monoid (First(..))
 import Data.Word (Word8)
 import GHC.Generics (Generic)
@@ -698,14 +699,23 @@ reply charsets settings msg =
     getAddrSpec :: Mailbox -> AddrSpec
     getAddrSpec (Mailbox _ addr) = addr
 
-    getSelf :: Address -> Maybe Mailbox
-    getSelf (Single addr) =
-      f <$> find (on (==) getAddrSpec addr) self
+    -- | Find a mailbox matching the given address.  If no match is
+    -- found, return @Nothing@.  If match is found, return the value
+    -- from the candidates collection if 'ReplyFromRewriteOn',
+    -- otherwise return the input value.
+    findMatchingMailbox
+      :: (Foldable t)
+      => t Mailbox -> Address -> Maybe Mailbox
+    findMatchingMailbox xs (Single addr) =
+      f <$> find (on (==) getAddrSpec addr) xs
       where
         f = case view replyFromRewriteMode settings of
           ReplyFromRewriteOn  -> id
           ReplyFromRewriteOff -> const addr
-    getSelf _ = Nothing
+    findMatchingMailbox _ _ = Nothing
+
+    getSelf :: Address -> Maybe Mailbox
+    getSelf = findMatchingMailbox self
 
     isSelf :: Address -> Bool
     isSelf = isJust . getSelf
@@ -721,7 +731,12 @@ reply charsets settings msg =
       SelfInRecipientsRemove -> filter (not . isSelf)
       SelfInRecipientsIgnore -> id
 
-    (_To, _Cc) = replyRecipients charsets settings msg
+    (t, c) = replyRecipients charsets settings msg
+    _To = filterSelf t
+    _To_mailboxes = mapMaybe (\case Single a -> Just a ; _ -> Nothing) _To
+    _Cc = c
+          & filterSelf
+          & filter (isNothing . findMatchingMailbox _To_mailboxes)
     _From =
       let preferred = Data.List.NonEmpty.head self
       in
