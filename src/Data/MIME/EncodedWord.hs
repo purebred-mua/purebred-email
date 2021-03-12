@@ -70,7 +70,7 @@ instance HasCharset TransferDecodedEncodedWord where
   type Decoded TransferDecodedEncodedWord = T.Text
   charsetName = to (pure . _transDecWordCharset)
   charsetData = to _transDecWordText
-  charsetDecoded = charsetText
+  charsetDecoded charsets = charsetText charsets
 
   charsetEncode s =
     let
