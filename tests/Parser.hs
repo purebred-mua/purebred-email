@@ -30,8 +30,8 @@ import Test.Tasty
 import Test.Tasty.HUnit
 import Test.Tasty.QuickCheck
 
-import Data.RFC5322
-import Data.RFC5322.Internal (takeTillString)
+import Data.IMF
+import Data.IMF.Internal (takeTillString)
 
 tests :: TestTree
 tests = testGroup "Parser tests"

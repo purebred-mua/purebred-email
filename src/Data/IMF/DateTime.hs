@@ -16,7 +16,7 @@
 
 {-# LANGUAGE OverloadedStrings #-}
 
-module Data.RFC5322.DateTime
+module Data.IMF.DateTime
   ( dateTime
   ) where
 
@@ -33,7 +33,7 @@ import Data.Time
   , ZonedTime(ZonedTime), fromGregorianValid, makeTimeOfDayValid
   , minutesToTimeZone, hoursToTimeZone, utc
   )
-import Data.RFC5322.Internal (fws, optionalCFWS, optionalFWS)
+import Data.IMF.Internal (fws, optionalCFWS, optionalFWS)
 
 dateTime :: Parser ZonedTime
 dateTime = do

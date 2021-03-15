@@ -1,3 +1,19 @@
+-- This file is part of purebred-email
+-- Copyright (C) 2018-2021  Fraser Tweedale
+--
+-- purebred-email is free software: you can redistribute it and/or modify
+-- it under the terms of the GNU Affero General Public License as published by
+-- the Free Software Foundation, either version 3 of the License, or
+-- (at your option) any later version.
+--
+-- This program is distributed in the hope that it will be useful,
+-- but WITHOUT ANY WARRANTY; without even the implied warranty of
+-- MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+-- GNU Affero General Public License for more details.
+--
+-- You should have received a copy of the GNU Affero General Public License
+-- along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TypeFamilies #-}
 
@@ -38,7 +54,7 @@ import Data.MIME.Error (EncodingError)
 import Data.MIME.TransferEncoding
 import Data.MIME.Base64
 import Data.MIME.QuotedPrintable
-import Data.RFC5322.Internal (ci, takeTillString)
+import Data.IMF.Internal (ci, takeTillString)
 
 data EncodedWord = EncodedWord
   { _encodedWordCharset :: CI.CI B.ByteString

@@ -41,7 +41,7 @@ import qualified Hedgehog.Gen as Gen
 import qualified Hedgehog.Range as Range
 
 import Data.MIME
-import Data.RFC5322.Internal (isAtext)
+import Data.IMF.Internal (isAtext)
 
 tests :: TestTree
 tests = testGroup "message tests"

@@ -1,3 +1,19 @@
+-- This file is part of purebred-email
+-- Copyright (C) 2017-2021  Fraser Tweedale
+--
+-- purebred-email is free software: you can redistribute it and/or modify
+-- it under the terms of the GNU Affero General Public License as published by
+-- the Free Software Foundation, either version 3 of the License, or
+-- (at your option) any later version.
+--
+-- This program is distributed in the hope that it will be useful,
+-- but WITHOUT ANY WARRANTY; without even the implied warranty of
+-- MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+-- GNU Affero General Public License for more details.
+--
+-- You should have received a copy of the GNU Affero General Public License
+-- along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
 {-# LANGUAGE DeriveAnyClass #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE FlexibleInstances #-}
@@ -10,7 +26,7 @@
 
 MIME messages (RFC 2045, RFC 2046, RFC 2183 and friends).
 
-This module extends "Data.RFC5322" with types for handling MIME
+This module extends "Data.IMF" with types for handling MIME
 messages.  It provides the 'mime' parsing helper function for
 use with 'message'.
 
@@ -96,7 +112,7 @@ module Data.MIME
   -- * Re-exports
   , CharsetLookup
   , defaultCharsets
-  , module Data.RFC5322
+  , module Data.IMF
   , module Data.MIME.Parameter
   , module Data.MIME.Error
   ) where
@@ -119,8 +135,8 @@ import qualified Data.CaseInsensitive as CI
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
 
-import Data.RFC5322
-import Data.RFC5322.Internal hiding (takeWhile1)
+import Data.IMF
+import Data.IMF.Internal hiding (takeWhile1)
 import Data.MIME.Error
 import Data.MIME.Charset
 import Data.MIME.EncodedWord
@@ -704,7 +720,7 @@ renderContentDisposition (ContentDisposition typ params) =
 --
 contentDisposition :: HasHeaders a => Lens' a (Maybe ContentDisposition)
 contentDisposition = headers . at "Content-Disposition" . dimap
-  (>>= either (const Nothing) Just . Data.RFC5322.parse parseContentDisposition)
+  (>>= either (const Nothing) Just . Data.IMF.parse parseContentDisposition)
   (fmap . fmap $ renderContentDisposition)
 
 -- | Traverse the value of the filename parameter (if present).
