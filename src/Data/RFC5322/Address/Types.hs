@@ -15,6 +15,7 @@
 -- along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 module Data.RFC5322.Address.Types
+  {-# DEPRECATED "Use \"Data.IMF\" instead" #-}
   (
     Mailbox(..)
   , Address(..)

@@ -14,6 +14,8 @@
 -- You should have received a copy of the GNU Affero General Public License
 -- along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-module Data.RFC5322 ( module X ) where
+module Data.RFC5322
+  {-# DEPRECATED "Use \"Data.IMF\" instead" #-}
+  ( module X ) where
 
 import Data.IMF as X
