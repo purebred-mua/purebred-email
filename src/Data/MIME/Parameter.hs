@@ -76,7 +76,7 @@ import qualified Data.Text.Encoding as T
 
 import Data.MIME.Charset
 import Data.MIME.Internal
-import Data.IMF.Internal (ci, isQtext, isVchar)
+import Data.IMF.Syntax (ci, isQtext, isVchar)
 
 type RawParameters = [(CI B.ByteString, B.ByteString)]
 -- | Header parameters.  Used for some headers including Content-Type

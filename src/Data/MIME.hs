@@ -136,7 +136,7 @@ import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
 
 import Data.IMF
-import Data.IMF.Internal hiding (takeWhile1)
+import Data.IMF.Syntax hiding (takeWhile1)
 import Data.MIME.Error
 import Data.MIME.Charset
 import Data.MIME.EncodedWord

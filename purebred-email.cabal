@@ -61,7 +61,7 @@ library
   import: common
   exposed-modules:
     Data.IMF
-    , Data.IMF.Internal
+    , Data.IMF.Syntax
     , Data.IMF.Text
     , Data.RFC5322
     , Data.RFC5322.Address.Text

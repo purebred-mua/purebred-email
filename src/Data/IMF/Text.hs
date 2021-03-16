@@ -49,7 +49,7 @@ import Data.List.NonEmpty (intersperse)
 
 import Data.MIME.Charset (decodeLenient)
 import Data.IMF (Mailbox(..), Address(..), AddrSpec(..), Domain(..))
-import Data.IMF.Internal
+import Data.IMF.Syntax
 
 
 renderMailboxes :: [Mailbox] -> T.Text

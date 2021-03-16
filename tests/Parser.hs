@@ -31,7 +31,7 @@ import Test.Tasty.HUnit
 import Test.Tasty.QuickCheck
 
 import Data.IMF
-import Data.IMF.Internal (takeTillString)
+import Data.IMF.Syntax (takeTillString)
 
 tests :: TestTree
 tests = testGroup "Parser tests"

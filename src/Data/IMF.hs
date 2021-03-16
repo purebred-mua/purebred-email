@@ -203,7 +203,7 @@ import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
 import Data.Time (ZonedTime, defaultTimeLocale, formatTime)
 
-import Data.IMF.Internal
+import Data.IMF.Syntax
   ( CI, ci, mk, original
   , (<<>>), foldMany, foldMany1Sep
   , char, fromChar, isAtext, isQtext, isVchar, isWsp

@@ -21,7 +21,14 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
-module Data.IMF.Internal
+{- |
+
+Parsers for low-level productions in the Internet Message Format.
+These parsers are used throughout this library and may be useful
+to other programs.
+
+-}
+module Data.IMF.Syntax
   (
   -- * Case-insensitive value parsers
     ci

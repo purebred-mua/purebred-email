@@ -16,4 +16,4 @@
 
 module Data.RFC5322.Internal ( module X ) where
 
-import Data.IMF.Internal as X
+import Data.IMF.Syntax as X

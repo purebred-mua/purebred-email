@@ -33,7 +33,7 @@ import Data.Time
   , ZonedTime(ZonedTime), fromGregorianValid, makeTimeOfDayValid
   , minutesToTimeZone, hoursToTimeZone, utc
   )
-import Data.IMF.Internal (fws, optionalCFWS, optionalFWS)
+import Data.IMF.Syntax (fws, optionalCFWS, optionalFWS)
 
 dateTime :: Parser ZonedTime
 dateTime = do

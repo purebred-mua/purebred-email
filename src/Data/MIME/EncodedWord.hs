@@ -54,7 +54,7 @@ import Data.MIME.Error (EncodingError)
 import Data.MIME.TransferEncoding
 import Data.MIME.Base64
 import Data.MIME.QuotedPrintable
-import Data.IMF.Internal (ci, takeTillString)
+import Data.IMF.Syntax (ci, takeTillString)
 
 data EncodedWord = EncodedWord
   { _encodedWordCharset :: CI.CI B.ByteString
