@@ -38,7 +38,7 @@ import Test.Tasty.QuickCheck
 import Test.QuickCheck.Instances ()
 
 import Data.MIME
-import qualified Data.IMF.Address.Text as AddressText
+import qualified Data.IMF.Text as AddressText
   (mailbox, address, renderAddress)
 
 renderField :: (CI.CI B.ByteString, B.ByteString) -> L.ByteString

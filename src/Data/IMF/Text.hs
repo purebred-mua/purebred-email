@@ -17,10 +17,10 @@
 {-# LANGUAGE OverloadedStrings #-}
 {- |
 
-Parser for roundtripping Text based `Mailbox`es and addresses.
+@Text@ parsers and printers for mailbox and address types.
 
 -}
-module Data.IMF.Address.Text
+module Data.IMF.Text
   (
     mailbox
   , mailboxList

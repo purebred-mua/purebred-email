@@ -16,4 +16,4 @@
 
 module Data.RFC5322.Address.Text ( module X ) where
 
-import Data.IMF.Address.Text as X
+import Data.IMF.Text as X

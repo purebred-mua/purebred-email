@@ -210,7 +210,7 @@ import Data.IMF.Internal
   , optionalCFWS, word, wsp, vchar, optionalFWS, crlf
   , domainLiteral, dotAtom, dotAtomText, localPart, quotedString
   )
-import {-# SOURCE #-} Data.IMF.Address.Text (readMailbox)
+import {-# SOURCE #-} Data.IMF.Text (readMailbox)
 import Data.IMF.DateTime (dateTime)
 import Data.MIME.Charset
 import Data.MIME.EncodedWord
