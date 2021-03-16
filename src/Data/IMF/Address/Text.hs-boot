@@ -16,6 +16,6 @@
 
 module Data.IMF.Address.Text where
 
-import {-# SOURCE #-} Data.IMF.Address.Types
+import {-# SOURCE #-} Data.IMF
 
 readMailbox :: String -> Either String Mailbox

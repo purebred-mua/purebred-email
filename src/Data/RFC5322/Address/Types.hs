@@ -14,6 +14,12 @@
 -- You should have received a copy of the GNU Affero General Public License
 -- along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-module Data.RFC5322.Address.Types ( module X ) where
+module Data.RFC5322.Address.Types
+  (
+    Mailbox(..)
+  , Address(..)
+  , AddrSpec(..)
+  , Domain(..)
+  ) where
 
-import Data.IMF.Address.Types as X
+import Data.IMF

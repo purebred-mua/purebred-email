@@ -62,7 +62,6 @@ library
   exposed-modules:
     Data.IMF
     , Data.IMF.Address.Text
-    , Data.IMF.Address.Types
     , Data.IMF.Internal
     , Data.RFC5322
     , Data.RFC5322.Address.Text

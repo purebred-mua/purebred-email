@@ -184,6 +184,7 @@ import Data.List (find, findIndex, intersperse)
 import Data.List.NonEmpty (NonEmpty, head, intersperse)
 import Data.Maybe (fromMaybe, isJust, isNothing, mapMaybe)
 import Data.Monoid (First(..))
+import Data.String (IsString(..))
 import Data.Word (Word8)
 import GHC.Generics (Generic)
 
@@ -209,8 +210,8 @@ import Data.IMF.Internal
   , optionalCFWS, word, wsp, vchar, optionalFWS, crlf
   , domainLiteral, dotAtom, dotAtomText, localPart, quotedString
   )
+import {-# SOURCE #-} Data.IMF.Address.Text (readMailbox)
 import Data.IMF.DateTime (dateTime)
-import Data.IMF.Address.Types
 import Data.MIME.Charset
 import Data.MIME.EncodedWord
 import Data.MIME.TransferEncoding (transferEncode)
@@ -911,3 +912,44 @@ parsePrint fwd rev = prism' rev (AL.maybeResult . AL.parse fwd . view recons)
 parse :: (Cons s s Word8 Word8) => Parser a -> s -> Either String a
 parse p = AL.eitherResult . AL.parse p . view recons
 {-# INLINE parse #-}
+
+
+-- | Email address with optional display name.
+-- The @Eq@ instance compares the display name case
+-- sensitively and the address as described at 'AddrSpec'.
+--
+data Mailbox =
+    Mailbox (Maybe T.Text {- display name -})
+             AddrSpec
+    deriving (Show, Eq, Generic, NFData)
+
+instance IsString Mailbox where
+  fromString =
+    either (error . mappend "Failed to parse Mailbox: ") id . readMailbox
+
+-- | Email address.  The @Eq@ instances compares the local part
+-- case sensitively, and the domain part as described at 'Domain'.
+--
+-- Address "detail" (section of local part after a @'+'@ character;
+-- also called "extension" or "subaddress") is part of the local
+-- part.  Therefore addresses that differ in this aspect, for
+-- example @alice+bank\@example.com@ and @alice+spam\@example.com@,
+-- are unequal.
+--
+data AddrSpec =
+    AddrSpec B.ByteString {- local part -}
+             Domain
+    deriving (Show, Eq, Generic, NFData)
+
+data Address
+    = Single Mailbox
+    | Group T.Text {- display name -}
+            [Mailbox]
+    deriving (Show, Eq, Generic, NFData)
+
+-- | A DNS name or "domain literal" (address literal).
+-- DNS names are compared case-insensitively.
+data Domain
+    = DomainDotAtom (NonEmpty (CI B.ByteString) {- printable ascii -})
+    | DomainLiteral B.ByteString
+    deriving (Show, Eq, Generic, NFData)

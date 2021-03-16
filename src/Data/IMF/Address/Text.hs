@@ -48,7 +48,7 @@ import Data.Attoparsec.Text as A hiding (char, parse, take)
 import Data.List.NonEmpty (intersperse)
 
 import Data.MIME.Charset (decodeLenient)
-import Data.IMF.Address.Types
+import Data.IMF (Mailbox(..), Address(..), AddrSpec(..), Domain(..))
 import Data.IMF.Internal
 
 
