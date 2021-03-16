@@ -112,8 +112,8 @@ testRenderMailboxes = testCase "test renderMailboxes" $
 rendersAddressesToTextSuccessfully :: TestTree
 rendersAddressesToTextSuccessfully =
   testGroup "renders addresses to text" $
-  (\(desc, address, expected) ->
-     testCase desc $ expected @=? AddressText.renderAddress address) <$>
+  (\(desc, addr, expected) ->
+     testCase desc $ expected @=? AddressText.renderAddress addr) <$>
   xs
   where
     xs =
