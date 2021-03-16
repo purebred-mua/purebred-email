@@ -294,12 +294,6 @@ body :: Lens (Message ctx a) (Message ctx' b) a b
 body f (Message h b) = fmap (\b' -> Message h b') (f b)
 {-# ANN body ("HLint: ignore Avoid lambda" :: String) #-}
 
-isSpecial :: Word8 -> Bool
-isSpecial = inClass "()<>[]:;@\\,.\""
-
-special :: Parser Word8
-special = satisfy isSpecial
-
 
 -- §3.3  Date and Time Specification
 -- Sat, 29 Sep 2018 12:51:05 +1000
