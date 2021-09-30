@@ -81,6 +81,11 @@ module Data.MIME
   , parseContentType
   , renderContentType
   , showContentType
+
+  -- *** @boundary@ parameter
+  , Boundary
+  , makeBoundary
+  , unBoundary
   , mimeBoundary
 
   -- *** Content-Type values
@@ -137,6 +142,7 @@ import qualified Data.Text.Encoding as T
 
 import Data.IMF
 import Data.IMF.Syntax hiding (takeWhile1)
+import Data.MIME.Boundary
 import Data.MIME.Error
 import Data.MIME.Charset
 import Data.MIME.EncodedWord
@@ -631,9 +637,10 @@ contentTypeApplicationOctetStream =
   ContentType "application" "octet-stream" mempty
 
 -- | @multipart/mixed; boundary=asdf@
-contentTypeMultipartMixed :: B.ByteString -> ContentType
+contentTypeMultipartMixed :: Boundary -> ContentType
 contentTypeMultipartMixed boundary =
-  set (parameter "boundary") (Just (ParameterValue Nothing Nothing boundary))
+  set (parameter "boundary")
+    (Just (ParameterValue Nothing Nothing (unBoundary boundary)))
   $ ContentType "multipart" "mixed" mempty
 
 -- | Lens to the content-type header.  Probably not a lawful lens.
@@ -742,7 +749,7 @@ filenameParameter :: HasParameters a => Lens' a (Maybe EncodedParameterValue)
 filenameParameter = parameter "filename"
 
 
--- | Get the boundary, if specified
+-- | Traversal of @boundary@ parameter (which may be unspecified)
 mimeBoundary :: Traversal' ContentType B.ByteString
 mimeBoundary = parameters . rawParameter "boundary"
 
@@ -778,9 +785,12 @@ mime' takeTillEnd h = RequiredBody $ case view contentType h of
   ct | view ctType ct == "multipart" ->
     case preview (rawParameter "boundary") ct of
       Nothing -> FailedParse MultipartBoundaryNotSpecified <$> takeTillEnd
-      Just boundary ->
-        (Multipart <$> multipart takeTillEnd boundary)
-        <|> (FailedParse MultipartParseFail <$> takeTillEnd)
+      Just v ->
+        case makeBoundary v of
+          Left s -> FailedParse (MultipartBoundaryInvalid s) <$> takeTillEnd
+          Right boundary ->
+            (Multipart <$> multipart takeTillEnd boundary)
+            <|> (FailedParse MultipartParseFail <$> takeTillEnd)
      | matchContentType "message" (Just "rfc822") ct ->
         (Encapsulated <$> message (mime' takeTillEnd))
         <|> (FailedParse EncapsulatedMessageParseFail <$> takeTillEnd)
@@ -790,6 +800,7 @@ mime' takeTillEnd h = RequiredBody $ case view contentType h of
 
 data MIMEParseError
   = MultipartBoundaryNotSpecified
+  | MultipartBoundaryInvalid B.ByteString
   | MultipartParseFail
   | EncapsulatedMessageParseFail
   deriving (Eq, Show)
@@ -799,14 +810,14 @@ data MIMEParseError
 --
 multipart
   :: Parser B.ByteString  -- ^ parser to the end of the part
-  -> B.ByteString         -- ^ boundary, sans leading "--"
+  -> Boundary             -- ^ boundary, sans leading "--"
   -> Parser (NonEmpty MIMEMessage)
 multipart takeTillEnd boundary =
   skipTillString dashBoundary *> crlf -- FIXME transport-padding
   *> fmap fromList (part `sepBy1` crlf)
   <* string "--" <* takeTillEnd
   where
-    delimiter = "\n--" <> boundary
+    delimiter = "\n--" <> unBoundary boundary
     dashBoundary = B.tail delimiter
     part = message (mime' (trim <$> takeTillString delimiter))
     trim s  -- trim trailing CR, because we only searched for LF
@@ -834,7 +845,7 @@ instance RenderMessage MIME where
 -- `attachments`
 --
 createMultipartMixedMessage
-    :: B.ByteString -- ^ Boundary
+    :: Boundary
     -> NonEmpty MIMEMessage -- ^ parts
     -> MIMEMessage
 createMultipartMixedMessage b attachments' =

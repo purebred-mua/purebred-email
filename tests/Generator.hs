@@ -92,7 +92,8 @@ multiPartMail =
                 "fileContentsASDF"
         nowUTC = UTCTime (ModifiedJulianDay 123) (secondsToDiffTime 123)
         now = utcToZonedTime utc nowUTC
-    in createMultipartMixedMessage "asdf" (fromList [p, a])
+        Right boundary = makeBoundary "asdf"
+    in createMultipartMixedMessage boundary (fromList [p, a])
        & set (headers . at "From") (Just $ renderMailboxes [from'])
        . set (headers . at "To") (Just $ renderAddresses [to'])
        . set (headers . at "Date") (Just $ renderRFC5322Date now)

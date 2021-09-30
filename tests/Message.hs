@@ -33,11 +33,13 @@ import Control.Lens (set, view)
 import qualified Data.ByteString as B
 import Data.CaseInsensitive
 import qualified Data.Text as T
+import System.Random (uniform)
 
 import Test.Tasty
 import Test.Tasty.Hedgehog
 import Hedgehog
 import qualified Hedgehog.Gen as Gen
+import qualified Hedgehog.Internal.Gen as Gen
 import qualified Hedgehog.Range as Range
 
 import Data.MIME
@@ -73,7 +75,7 @@ genMultipart = depths >>= go
   -- Generate a 50 character multipart boundary.  These MUST be unique
   -- for all (nested) multipart messages.  Assume negligible probability
   -- of collision.
-  genBoundary = Gen.utf8 (Range.singleton 50) printableAsciiChar
+  genBoundary = Gen.generate (\_size seed -> fst (uniform seed))
 
   go 0 = genTextPlain
   go n = createMultipartMixedMessage
