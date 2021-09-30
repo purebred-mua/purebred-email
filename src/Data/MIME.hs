@@ -401,7 +401,7 @@ type TextEntity = Message () T.Text
 data MIME
   = Part B.ByteString
   | Encapsulated MIMEMessage
-  | Multipart (NonEmpty MIMEMessage)
+  | Multipart Boundary (NonEmpty MIMEMessage)
   | FailedParse MIMEParseError B.ByteString
   deriving (Eq, Show)
 
@@ -420,8 +420,8 @@ entities f (Message h a) = case a of
   Part b ->
     (\(Message h' b') -> Message h' (Part b')) <$> f (Message h b)
   Encapsulated msg -> Message h . Encapsulated <$> entities f msg
-  Multipart bs ->
-    Message h . Multipart <$> sequenceA (entities f <$> bs)
+  Multipart b bs ->
+    Message h . Multipart b <$> sequenceA (entities f <$> bs)
   FailedParse _ _ -> pure (Message h a)
 
 -- | Leaf entities with @Content-Disposition: attachment@
@@ -789,7 +789,7 @@ mime' takeTillEnd h = RequiredBody $ case view contentType h of
         case makeBoundary v of
           Left s -> FailedParse (MultipartBoundaryInvalid s) <$> takeTillEnd
           Right boundary ->
-            (Multipart <$> multipart takeTillEnd boundary)
+            (Multipart boundary <$> multipart takeTillEnd boundary)
             <|> (FailedParse MultipartParseFail <$> takeTillEnd)
      | matchContentType "message" (Just "rfc822") ct ->
         (Encapsulated <$> message (mime' takeTillEnd))
@@ -829,12 +829,12 @@ multipart takeTillEnd boundary =
 --
 instance RenderMessage MIME where
   tweakHeaders = set (headers . at "MIME-Version") (Just "1.0")
-  buildBody h z = Just $ case z of
+  buildBody _h z = Just $ case z of
     Part partbody -> Builder.byteString partbody
     Encapsulated msg -> buildMessage msg
-    Multipart xs ->
-      let b = firstOf (contentType . mimeBoundary) h
-          boundary = maybe mempty (\b' -> "--" <> Builder.byteString b') b
+    Multipart b xs ->
+      let
+        boundary = "--" <> Builder.byteString (unBoundary b)
       in
         boundary <> "\r\n"
         <> fold (intersperse ("\r\n" <> boundary <> "\r\n") (fmap buildMessage xs))
@@ -851,7 +851,7 @@ createMultipartMixedMessage
 createMultipartMixedMessage b attachments' =
     let hdrs = Headers [] &
                 set contentType (contentTypeMultipartMixed b)
-    in Message hdrs (Multipart attachments')
+    in Message hdrs (Multipart b attachments')
 
 -- | Create an inline, text/plain, utf-8 encoded message
 --
