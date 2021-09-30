@@ -828,7 +828,7 @@ multipart takeTillEnd boundary =
 -- | Sets the @MIME-Version: 1.0@ header.
 --
 instance RenderMessage MIME where
-  tweakHeaders = set (headers . at "MIME-Version") (Just "1.0")
+  tweakHeaders _ = set (headers . at "MIME-Version") (Just "1.0")
   buildBody _h z = Just $ case z of
     Part partbody -> Builder.byteString partbody
     Encapsulated msg -> buildMessage msg

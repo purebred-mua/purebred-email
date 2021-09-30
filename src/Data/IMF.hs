@@ -24,7 +24,6 @@
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TupleSections #-}
-{-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeFamilies #-}
 
 {- |
@@ -802,15 +801,15 @@ class RenderMessage a where
 
   -- | Allows tweaking the headers before rendering.  Default
   -- implementation is a no-op.
-  tweakHeaders :: Headers -> Headers
-  tweakHeaders = id
+  tweakHeaders :: a -> Headers -> Headers
+  tweakHeaders _ = id
 
 -- | Construct a 'Builder.Builder' for the message.  This allows efficient
 -- streaming to IO handles.
 --
 buildMessage :: forall ctx a. (RenderMessage a) => Message ctx a -> Builder.Builder
 buildMessage (Message h b) =
-  buildFields (tweakHeaders @a h)
+  buildFields (tweakHeaders b h)
   <> maybe mempty ("\r\n" <>) (buildBody h b)
 
 -- | Render a message to a lazy 'L.ByteString'.  (You will probably not
