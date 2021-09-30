@@ -40,6 +40,7 @@ import System.Random.Stateful
 -- @
 --
 newtype Boundary = Boundary B.ByteString
+  deriving (Eq, Show)
 
 unBoundary :: Boundary -> B.ByteString
 unBoundary (Boundary s) = s
