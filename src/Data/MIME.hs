@@ -82,7 +82,10 @@ module Data.MIME
   , renderContentType
   , showContentType
 
-  -- *** @boundary@ parameter
+  -- *** @multipart@ media type
+  , MultipartSubtype(..)
+
+  -- **** @boundary@ parameter
   , Boundary
   , makeBoundary
   , unBoundary
@@ -395,13 +398,52 @@ type WireEntity = Message EncStateWire B.ByteString
 type ByteEntity = Message EncStateByte B.ByteString
 type TextEntity = Message () T.Text
 
+data MultipartSubtype
+  = Mixed
+  -- ^ <https://www.rfc-editor.org/rfc/rfc2046.html#section-5.1.3 RFC 2046 §5.1.3.>
+  -- Independent body parts, bundled in a particular order.
+  | Alternative
+  -- ^ <https://www.rfc-editor.org/rfc/rfc2046.html#section-5.1.4 RFC 2046 §5.1.4.>
+  -- Each part is an alternative version of the same content
+  -- (e.g. plain text and HTML), in order of increasing faithfulness
+  -- to the original content.
+  | Digest
+  -- ^ <https://www.rfc-editor.org/rfc/rfc2046.html#section-5.1.5 RFC 2046 §5.1.5.>
+  -- Collection of messages. Parts should have @Content-Type: message/rfc822@.
+  | Parallel
+  -- ^ <https://www.rfc-editor.org/rfc/rfc2046.html#section-5.1.6 RFC 2046 §5.1.6.>
+  -- Independent body parts, order not significants.  Parts may be
+  -- displayed in parallel if the system supports it.
+  | Related
+      ContentType {- ^ @type@ -}
+      (Maybe B.ByteString) {- ^ @start@ -}
+      (Maybe B.ByteString) {- ^ @start-info@ -}
+  -- ^ <https://www.rfc-editor.org/rfc/rfc2387.html RFC 2387.>
+  -- Aggregate or compound objects.
+  | Signed B.ByteString {- ^ protocol -} B.ByteString {- ^ micalg -}
+  -- ^ <https://www.rfc-editor.org/rfc/rfc1847.html#section-2.1 RFC 1847 §2.1.>
+  -- Signed messages.
+  | Encrypted B.ByteString {- protocol -}
+  -- ^ <https://www.rfc-editor.org/rfc/rfc1847.html#section-2.2 RFC 1847 §2.2.>
+  | Report B.ByteString {- report-type -}
+  -- ^ <https://www.rfc-editor.org/rfc/rfc6522.html RFC 6522>.
+  -- Electronic mail reports.
+  | Multilingual
+  -- ^ <https://www.rfc-editor.org/rfc/rfc8255.html RFC 8255>.
+  -- Multilingual messages.  The first part should be a multilingual
+  -- explanatory preface.  Subsequent parts MUST have a
+  -- @Content-Language@ and a @Content-Type@ field, and MAY have a
+  -- @Content-Translation-Type@ field.
+  | Unrecognised (CI B.ByteString)
+  deriving (Eq, Show)
+
 -- | MIME message body.  Either a single @Part@, or @Multipart@.
 -- Only the body is represented; preamble and epilogue are not.
 --
 data MIME
   = Part B.ByteString
   | Encapsulated MIMEMessage
-  | Multipart Boundary (NonEmpty MIMEMessage)
+  | Multipart MultipartSubtype Boundary (NonEmpty MIMEMessage)
   | FailedParse MIMEParseError B.ByteString
   deriving (Eq, Show)
 
@@ -420,8 +462,8 @@ entities f (Message h a) = case a of
   Part b ->
     (\(Message h' b') -> Message h' (Part b')) <$> f (Message h b)
   Encapsulated msg -> Message h . Encapsulated <$> entities f msg
-  Multipart b bs ->
-    Message h . Multipart b <$> sequenceA (entities f <$> bs)
+  Multipart sub b bs ->
+    Message h . Multipart sub b <$> sequenceA (entities f <$> bs)
   FailedParse _ _ -> pure (Message h a)
 
 -- | Leaf entities with @Content-Disposition: attachment@
@@ -637,15 +679,33 @@ contentTypeApplicationOctetStream =
   ContentType "application" "octet-stream" mempty
 
 -- | @multipart/...; boundary=asdf@
-contentTypeMultipart :: CI B.ByteString -> Boundary -> ContentType
+contentTypeMultipart :: MultipartSubtype -> Boundary -> ContentType
 contentTypeMultipart subtype boundary =
-  set (parameter "boundary")
-    (Just (ParameterValue Nothing Nothing (unBoundary boundary)))
-  $ ContentType "multipart" subtype mempty
+  ContentType "multipart" sub mempty
+    & setParam "boundary" (unBoundary boundary)
+    & appendParams
+  where
+    setParam k v = set (parameter k) (Just $ ParameterValue Nothing Nothing v)
+    (sub, appendParams) = case subtype of
+      Mixed -> ("mixed", id)
+      Alternative -> ("alternative", id)
+      Digest -> ("digest", id)
+      Parallel -> ("parallel", id)
+      Multilingual -> ("multilingual", id)
+      Report typ -> ("report", setParam "report-type" typ)
+      Signed proto micalg -> ("signed", setParam "protocol" proto . setParam "micalg" micalg)
+      Encrypted proto -> ("encrypted", setParam "protocol" proto)
+      Related typ start startInfo ->
+        ( "related"
+        , maybe id (setParam "start") start
+          . maybe id (setParam "start-info") startInfo
+          . setParam "type" (renderContentType typ)
+        )
+      Unrecognised sub' -> (sub', id)
 
 -- | @multipart/mixed; boundary=asdf@
 contentTypeMultipartMixed :: Boundary -> ContentType
-contentTypeMultipartMixed = contentTypeMultipart "mixed"
+contentTypeMultipartMixed = contentTypeMultipart Mixed
 
 -- | Lens to the content-type header.  Probably not a lawful lens.
 --
@@ -787,24 +847,48 @@ mime'
   -> BodyHandler MIME
 mime' takeTillEnd h = RequiredBody $ case view contentType h of
   ct | view ctType ct == "multipart" ->
-    case preview (rawParameter "boundary") ct of
-      Nothing -> FailedParse MultipartBoundaryNotSpecified <$> takeTillEnd
-      Just v ->
-        case makeBoundary v of
-          Left s -> FailedParse (MultipartBoundaryInvalid s) <$> takeTillEnd
-          Right boundary ->
-            (Multipart boundary <$> multipart takeTillEnd boundary)
-            <|> (FailedParse MultipartParseFail <$> takeTillEnd)
+        case prepMultipart ct of
+          Left err              -> FailedParse err <$> takeTillEnd
+          Right (sub, boundary) ->
+            Multipart sub boundary <$> multipart takeTillEnd boundary
+            <|> FailedParse MultipartParseFail <$> takeTillEnd
      | matchContentType "message" (Just "rfc822") ct ->
         (Encapsulated <$> message (mime' takeTillEnd))
         <|> (FailedParse EncapsulatedMessageParseFail <$> takeTillEnd)
-  _ -> part
+  _ -> Part <$> takeTillEnd
   where
-    part = Part <$> takeTillEnd
+    prepMultipart ct =
+      (,) <$> parseSubtype ct <*> parseBoundary ct
+    parseBoundary ct =
+      getRequiredParam "boundary" ct
+      >>= over _Left (InvalidParameterValue "boundary") . makeBoundary
+    getRequiredParam k =
+      maybe (Left $ RequiredParameterMissing k) Right . preview (rawParameter k)
+    getOptionalParam k =
+      Right . preview (rawParameter k)
+    parseSubtype ct = case view ctSubtype ct of
+      "mixed"         -> pure Mixed
+      "alternative"   -> pure Alternative
+      "digest"        -> pure Digest
+      "parallel"      -> pure Parallel
+      "multilingual"  -> pure Multilingual
+      "report"        -> Report <$> getRequiredParam "report-type" ct
+      "signed"        -> Signed
+                          <$> getRequiredParam "protocol" ct
+                          <*> getRequiredParam "micalg" ct
+      "encrypted"     -> Encrypted <$> getRequiredParam "protocol" ct
+      "related"       -> Related
+                          <$> ( getRequiredParam "type" ct
+                              >>= \s -> maybe (Left $ InvalidParameterValue "type" s) Right
+                                          (preview (parsed parseContentType) s)
+                              )
+                          <*> getOptionalParam "start" ct
+                          <*> getOptionalParam "start-info" ct
+      unrecognised    -> pure $ Unrecognised unrecognised
 
 data MIMEParseError
-  = MultipartBoundaryNotSpecified
-  | MultipartBoundaryInvalid B.ByteString
+  = RequiredParameterMissing (CI B.ByteString)
+  | InvalidParameterValue (CI B.ByteString) B.ByteString
   | MultipartParseFail
   | EncapsulatedMessageParseFail
   deriving (Eq, Show)
@@ -835,18 +919,16 @@ instance RenderMessage MIME where
   tweakHeaders b h =
     h
     & set (headers . at "MIME-Version") (Just "1.0")
-    & set contentType ct'
+    & setContentType
     where
-      ct@(ContentType typ sub _params) = view contentType h
-      ct' = case b of
-        Multipart boundary _
-          | typ == "multipart"  -> contentTypeMultipart sub boundary
-          | otherwise           -> contentTypeMultipartMixed boundary
-        _                       -> ct
+      setContentType = case b of
+        Multipart sub boundary _  -> set contentType (contentTypeMultipart sub boundary)
+        -- FIXME message/rfc822 for Encapsulated?
+        _                         -> id
   buildBody _h z = Just $ case z of
     Part partbody -> Builder.byteString partbody
     Encapsulated msg -> buildMessage msg
-    Multipart b xs ->
+    Multipart _sub b xs ->
       let
         boundary = "--" <> Builder.byteString (unBoundary b)
       in
@@ -863,9 +945,8 @@ createMultipartMixedMessage
     -> NonEmpty MIMEMessage -- ^ parts
     -> MIMEMessage
 createMultipartMixedMessage b attachments' =
-    let hdrs = Headers [] &
-                set contentType (contentTypeMultipartMixed b)
-    in Message hdrs (Multipart b attachments')
+  let hdrs = Headers [] & set contentType (contentTypeMultipartMixed b)
+  in Message hdrs (Multipart Mixed b attachments')
 
 -- | Create an inline, text/plain, utf-8 encoded message
 --
