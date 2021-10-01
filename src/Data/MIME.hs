@@ -923,7 +923,7 @@ instance RenderMessage MIME where
     where
       setContentType = case b of
         Multipart sub boundary _  -> set contentType (contentTypeMultipart sub boundary)
-        -- FIXME message/rfc822 for Encapsulated?
+        Encapsulated _msg         -> set contentType "message/rfc822"
         _                         -> id
   buildBody _h z = Just $ case z of
     Part partbody -> Builder.byteString partbody
