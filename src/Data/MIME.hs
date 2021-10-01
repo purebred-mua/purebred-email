@@ -722,6 +722,13 @@ contentTypeMultipartMixed = contentTypeMultipart Mixed
 -- otherwise it is added.  Unrecognised Content-Transfer-Encoding
 -- is ignored when setting.
 --
+-- __Note__: when dealing with 'Multipart' or 'Encapsulated'
+-- messages, the @Content-Type@ header will be overridden when
+-- serialising the message.  This avoids scenarios where the
+-- @Content-Type@ does not match the structure of the message.  In
+-- general, the @Content-Type@ header should be treated as "read
+-- only" for multipart or encapsulated message.
+--
 contentType :: HasHeaders a => Lens' a ContentType
 contentType = headers . lens sa sbt where
   sa s = case view cte s of
