@@ -636,12 +636,16 @@ contentTypeApplicationOctetStream :: ContentType
 contentTypeApplicationOctetStream =
   ContentType "application" "octet-stream" mempty
 
--- | @multipart/mixed; boundary=asdf@
-contentTypeMultipartMixed :: Boundary -> ContentType
-contentTypeMultipartMixed boundary =
+-- | @multipart/...; boundary=asdf@
+contentTypeMultipart :: CI B.ByteString -> Boundary -> ContentType
+contentTypeMultipart subtype boundary =
   set (parameter "boundary")
     (Just (ParameterValue Nothing Nothing (unBoundary boundary)))
-  $ ContentType "multipart" "mixed" mempty
+  $ ContentType "multipart" subtype mempty
+
+-- | @multipart/mixed; boundary=asdf@
+contentTypeMultipartMixed :: Boundary -> ContentType
+contentTypeMultipartMixed = contentTypeMultipart "mixed"
 
 -- | Lens to the content-type header.  Probably not a lawful lens.
 --
@@ -833,17 +837,12 @@ instance RenderMessage MIME where
     & set (headers . at "MIME-Version") (Just "1.0")
     & set contentType ct'
     where
-      ct@(ContentType typ _sub _params) = view contentType h
+      ct@(ContentType typ sub _params) = view contentType h
       ct' = case b of
         Multipart boundary _
-          | typ == "multipart"
-          -> set (parameter "boundary")
-              (Just (ParameterValue Nothing Nothing (unBoundary boundary)))
-              ct
-          | otherwise
-          -> contentTypeMultipartMixed boundary
-        _
-          -> ct
+          | typ == "multipart"  -> contentTypeMultipart sub boundary
+          | otherwise           -> contentTypeMultipartMixed boundary
+        _                       -> ct
   buildBody _h z = Just $ case z of
     Part partbody -> Builder.byteString partbody
     Encapsulated msg -> buildMessage msg
