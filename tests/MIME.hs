@@ -136,14 +136,14 @@ testContentDisposition =
         set
           (attachments . headers . contentDisposition . traversed . filenameParameter)
           Nothing
-        (Message (Headers []) (Multipart boundary . fromList $
+        (Message (Headers []) (Multipart Mixed boundary . fromList $
           [ Message (Headers [("Content-Disposition", "inline; filename=msg.txt")]) (Part "")
           , Message (Headers [("Content-Disposition", "attachment; filename=foo.pdf")]) (Part "")
           , Message (Headers [("Content-Disposition", "attachment; filename=bar.pdf")]) (Part "")
           ]
         ))
         @?=
-        Message (Headers []) (Multipart boundary . fromList $
+        Message (Headers []) (Multipart Mixed boundary . fromList $
           [ Message (Headers [("Content-Disposition", "inline; filename=msg.txt")]) (Part "")
           , Message (Headers [("Content-Disposition", "attachment")]) (Part "")
           , Message (Headers [("Content-Disposition", "attachment")]) (Part "")
