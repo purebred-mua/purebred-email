@@ -828,7 +828,22 @@ multipart takeTillEnd boundary =
 -- | Sets the @MIME-Version: 1.0@ header.
 --
 instance RenderMessage MIME where
-  tweakHeaders _ = set (headers . at "MIME-Version") (Just "1.0")
+  tweakHeaders b h =
+    h
+    & set (headers . at "MIME-Version") (Just "1.0")
+    & set contentType ct'
+    where
+      ct@(ContentType typ _sub _params) = view contentType h
+      ct' = case b of
+        Multipart boundary _
+          | typ == "multipart"
+          -> set (parameter "boundary")
+              (Just (ParameterValue Nothing Nothing (unBoundary boundary)))
+              ct
+          | otherwise
+          -> contentTypeMultipartMixed boundary
+        _
+          -> ct
   buildBody _h z = Just $ case z of
     Part partbody -> Builder.byteString partbody
     Encapsulated msg -> buildMessage msg
