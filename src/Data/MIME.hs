@@ -77,7 +77,6 @@ module Data.MIME
   , ctType
   , ctSubtype
   , matchContentType
-  , ctEq
   , parseContentType
   , renderContentType
   , showContentType
@@ -548,12 +547,6 @@ renderContentType (ContentType typ sub params) =
 printParameters :: Parameters -> B.ByteString
 printParameters (Parameters xs) =
   foldMap (\(k,v) -> "; " <> CI.original k <> "=" <> v) xs
-
--- | Are the type and subtype the same? (parameters are ignored)
---
-ctEq :: ContentType -> ContentType -> Bool
-ctEq (ContentType typ1 sub1 _) = matchContentType typ1 (Just sub1)
-{-# DEPRECATED ctEq "Use 'matchContentType' instead" #-}
 
 ctType :: Lens' ContentType (CI B.ByteString)
 ctType f (ContentType a b c) = fmap (\a' -> ContentType a' b c) (f a)
