@@ -217,7 +217,7 @@ Hello, world!
 Create a __multipart message with attachment__:
 
 @
-λ> attachment = 'createAttachment' "application/json" (Just "data.json") "{\"foo\":42}"
+λ> attachment = 'createAttachment' "application/json" (Just "data.json") "{\\"foo\\":42}"
 λ> msg2 = 'createMultipartMixedMessage' "boundary" [msg, attachment]
 λ> s2 = 'renderMessage' msg2
 λ> L.putStrLn s2
