@@ -853,14 +853,11 @@ foldUnstructured s i = case Char8.words s of
   limit = 76  -- could be 78, but this preserves old behaviour
   go [] _ = mempty
   go (chunk:chunks) col
-    | col + 1 + B.length chunk < limit =
-        -- there is room for the chunk
+    | col <= 1 || col + 1 + B.length chunk < limit =
+        -- either there is room for the chunk, or we are at the
+        -- beginning of a line so add it here anyway (otherwise
+        -- we will add "\r\n" and recurse forever)
         " " <> Builder.byteString chunk <> go chunks (col + 1 + B.length chunk)
-    | col <= 1 =
-        -- there isn't room for the chunk, but we are at the
-        -- beginning of the line so add it here anyway (otherwise
-        -- we will add "\r\n" and recurse forever
-        " " <> Builder.byteString chunk <> "\r\n" <> go chunks 0
     | otherwise = "\r\n" <> go (chunk:chunks) 0  -- fold
 
 -- | Printable ASCII excl. ':'
