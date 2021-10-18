@@ -62,7 +62,7 @@ contentTransferEncodeBase64 :: B.ByteString -> B.ByteString
 contentTransferEncodeBase64 = L.toStrict . wrap . L64.encode . L.fromStrict
   where
   wrap s = case L.splitAt 76 s of
-    ("", _) -> ""
+    (l, "") -> l
     (l, s') -> l <> "\r\n" <> wrap s'
 
 {-
