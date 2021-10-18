@@ -41,23 +41,28 @@ The main parsing function is 'message'.  It takes a second function
 that can inspect the headers to determine how to parse the body.
 
 @
-'message' :: ('Headers' -> 'BodyHandler' a) -> Parser (Message ctx a)
+'message' :: ('Headers' -> 'BodyHandler' a) -> Parser ('Message' ctx a)
 @
 
 The 'Message' type is parameterised over the body type, and a
 phantom type that can be used for context.
 
 @
-data 'Message' ctx a = Message 'Headers' a
+data 'Message' ctx a = 'Message' 'Headers' a
 @
 
 Headers and body can be accessed via the 'headers', 'header' and
 'body' optics.
 
 @
-'headers' :: Lens' (Message ctx a) Headers
-'header' :: CI B.ByteString -> Fold Headers B.ByteString
-'body' :: Lens (Message ctx a) (Message ctx' b) a b
+'headers' :: 'HasHeaders' a => Lens'       a         Headers
+headers ::                 Lens' ('Message' ctx b) Headers
+
+'header' :: 'HasHeaders' a => CI B.ByteString -> Traversal'        a        B.ByteString
+header ::                 CI B.ByteString -> Traversal' ('Message' ctx b) B.ByteString
+header ::                 CI B.ByteString -> Traversal'     'Headers'     B.ByteString
+
+'body' :: Lens ('Message' ctx a) (Message ctx' b) a b
 @
 
 The following example program parses an input, interpreting the body

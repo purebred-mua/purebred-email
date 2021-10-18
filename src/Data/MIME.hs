@@ -24,11 +24,8 @@
 
 {- |
 
-MIME messages (RFC 2045, RFC 2046, RFC 2183 and friends).
-
-This module extends "Data.IMF" with types for handling MIME
-messages.  It provides the 'mime' parsing helper function for
-use with 'message'.
+This module extends "Data.IMF" with types for handling MIME messages
+(RFC 2045, 2046, 2183 and others).
 
 -}
 module Data.MIME
@@ -156,10 +153,11 @@ import Data.MIME.TransferEncoding
 Create an __inline, plain text message__ and __render__ it:
 
 @
+λ> :set -XOverloadedStrings
 λ> import Data.MIME
 λ> msg = 'createTextPlainMessage' "Hello, world!"
 λ> s = 'renderMessage' msg
-λ> L.putStrLn s
+λ> Data.ByteString.Lazy.Char8.putStrLn s
 MIME-Version: 1.0
 Content-Transfer-Encoding: 7bit
 Content-Disposition: inline
@@ -168,16 +166,27 @@ Content-Type: text/plain; charset=us-ascii
 Hello, world!
 @
 
-Set the __@From@__ and __@To@__ headers:
+Optics are provided for getting and setting the __sender and recipient__
+fields:
 
 @
-λ> alice = Mailbox Nothing (AddrSpec "alice" (DomainDotAtom ("example" :| ["com"])))
-λ> bob = Mailbox Nothing (AddrSpec "bob" (DomainDotAtom ("example" :| ["net"])))
-λ> msgFromAliceToBob = set ('headerFrom' 'defaultCharsets' [alice] . set ('headerTo' defaultCharsets) [Single bob] $ msg
-λ> L.putStrLn (renderMessage msgFromAliceToBob)
+'headerFrom', 'headerReplyTo', 'headerTo', 'headerCC', 'headerBCC'
+  :: ('HasHeaders' a)
+  => 'CharsetLookup' -> Lens' a ['Address']
+@
+
+Example:
+
+@
+λ> alice = 'Single' "alice\@example.com"
+λ> :t alice
+alice :: 'Address'
+λ> bob = 'Single' "bob\@example.net"
+λ> msgFromAliceToBob = set ('headerFrom' 'defaultCharsets') [alice] . set ('headerTo' defaultCharsets) [bob] $ msg
+λ> Data.ByteString.Lazy.Char8.putStrLn ('renderMessage' msgFromAliceToBob)
 MIME-Version: 1.0
-From: alice@example.com
-To: bob@example.net
+From: alice\@example.com
+To: bob\@example.net
 Content-Transfer-Encoding: 7bit
 Content-Disposition: inline
 Content-Type: text/plain; charset=us-ascii
@@ -185,19 +194,23 @@ Content-Type: text/plain; charset=us-ascii
 Hello, world!
 @
 
-The 'headerFrom', 'headerTo', 'headerCC' and 'headerBCC' lenses are the most
-convenient interface for reading and setting the __sender and recipient addresses__.
-Note that you would usually not manually construct email addresses
-manually as was done above.  Instead you would usually read it from another
-email or configuration, or parse addresses from user input.
+__NOTE__: the values @alice@ and @bob@ in the above example make use
+of the __non-total__ @instance 'IsString' 'Mailbox'@.  This instance
+is provided as convenience for static values.  For parsing mailboxes,
+use one of:
+
+@
+Data.IMF.'Data.IMF.mailbox'      :: 'CharsetLookup' -> Parser ByteString Mailbox
+Data.IMF.Text.'Data.IMF.Text.mailbox' ::                  Parser       Text Mailbox
+@
 
 The __@Subject@__ header is set via 'headerSubject'.  __Other single-valued headers__
 can be set via 'headerText'.
 
 @
 λ> :{
-| L.putStrLn . renderMessage $
-|   set ('headerText' defaultCharsets "Comments") (Just "와")
+| Data.ByteString.Lazy.Char8.putStrLn . 'renderMessage' $
+|   set ('headerText' defaultCharsets \"Comments\") (Just "와")
 |   . set ('headerSubject' defaultCharsets) (Just "Hi from Alice")
 |   $ msgFromAliceToBob
 | :}
@@ -205,42 +218,58 @@ can be set via 'headerText'.
 MIME-Version: 1.0
 Comments: =?utf-8?B?7JmA?=
 Subject: Hi from Alice
-From: alice@example.com
-To: bob@example.net
+From: alice\@example.com
+To: bob\@example.net
 Content-Transfer-Encoding: 7bit
 Content-Disposition: inline
 Content-Type: text/plain; charset=us-ascii
 
 Hello, world!
+@
+
+To create __multipart messages__ you need to construct a 'Boundary' value.
+Boundary values should be unique (not appearing elsewhere in a message).
+High-entropy random values are good.  You can use 'mkBoundary' to construct a
+value (checking that the input is a legal value).  Or you can ask
+/purebred-email/ to generate a conformant value, as below.
+
+@
+λ> import System.Random
+λ> boundary <- getStdRandom uniform :: IO Boundary
+λ> boundary
+Boundary "MEgno8wUdTT\/g8vB,vj.3K8sjU6i_r=CFf1jqrAmnxrv0a\/9PA'G4hQ8oE,u016w"
 @
 
 Create a __multipart message with attachment__:
 
 @
 λ> attachment = 'createAttachment' "application/json" (Just "data.json") "{\\"foo\\":42}"
-λ> msg2 = 'createMultipartMixedMessage' "boundary" [msg, attachment]
+λ> msg2 = 'createMultipartMixedMessage' boundary (msg :| [attachment])
 λ> s2 = 'renderMessage' msg2
-λ> L.putStrLn s2
+λ> Data.ByteString.Lazy.Char8.putStrLn s2
 MIME-Version: 1.0
-Content-Type: multipart/mixed; boundary=boundary
+Content-Type: multipart/mixed;
+ boundary="MEgno8wUdTT\/g8vB,vj.3K8sjU6i_r=CFf1jqrAmnxrv0a\/9PA'G4hQ8oE,u016w"
 
---boundary
+--MEgno8wUdTT\/g8vB,vj.3K8sjU6i_r=CFf1jqrAmnxrv0a\/9PA'G4hQ8oE,u016w
+MIME-Version: 1.0
 Content-Transfer-Encoding: 7bit
 Content-Disposition: inline
 Content-Type: text/plain; charset=us-ascii
 
 Hello, world!
---boundary
+--MEgno8wUdTT\/g8vB,vj.3K8sjU6i_r=CFf1jqrAmnxrv0a\/9PA'G4hQ8oE,u016w
+MIME-Version: 1.0
 Content-Transfer-Encoding: 7bit
 Content-Disposition: attachment; filename=data.json
 Content-Type: application/json
 
 {"foo":42}
---boundary--
+--MEgno8wUdTT\/g8vB,vj.3K8sjU6i_r=CFf1jqrAmnxrv0a\/9PA'G4hQ8oE,u016w--
 
 @
 
-__NOTE:__ if you only need to write a serialised 'Message' to an 
+__NOTE:__ for writing a 'Message' to an 
 IO handle, 'buildMessage' is more efficient than 'renderMessage'.
 
 -}
@@ -268,11 +297,12 @@ function is the right one to use.
 {- $inspect
 
 Parsing an email is nice, but your normally want to get at the
-content inside.  One of the most important tasks is __finding entities__
-of interest, e.g. attachments, plain text or HTML bodies.  The
-'entities' optic is a fold over all /leaf/ entities in the message.
-That is, all the non-multipart bodies.  You can use 'filtered' to
-refine the query.
+content inside.  One of the most important tasks is __finding
+entities__ of interest, e.g.  attachments, plain text or HTML
+bodies.  The 'entities' optic is a fold over all /leaf/ entities in
+the message.  That is, the leaves of (possibly nested) multipart
+messages and "message/rfc822" encapsulations.  You can use
+'filtered' to refine the query.
 
 For example, let's say you want to find the first @text/plain@
 entity in a message.  Define a predicate with the help of the
@@ -281,11 +311,9 @@ entity in a message.  Define a predicate with the help of the
 @
 λ> isTextPlain = 'matchContentType' "text" (Just "plain") . view 'contentType'
 λ> :t isTextPlain
-isTextPlain :: HasHeaders s => s -> Bool
-λ> isTextPlain msg
-True
-λ> isTextPlain msg2
-False
+isTextPlain :: 'HasHeaders' s => s -> Bool
+λ> (isTextPlain msg, isTextPlain msg2)
+(True,False)
 @
 
 Now we can use the predicate to construct a fold and retrieve the
@@ -296,24 +324,21 @@ body.  If there is no matching entity the result would be @Nothing@.
 Just "Hello, world!"
 @
 
-For __attachments__ you are normally interested in the binary data
-and possibly the filename (if specified).  In the following example
-we retrieve all attachments, and their filenames, as a list of
-tuples (although there is only one in the message).  Note that
-
-Get the (optional) filenames and (decoded) body of all attachments,
-as a list of tuples.  The 'attachments' optic selects non-multipart
-entities with @Content-Disposition: attachment@.  The 'attachments'
-fold targets all entities with @Content-Disposition: attachment@.
-The 'transferDecoded'' optic undoes the @Content-Transfer-Encoding@
-of the entity.
+For __attachments__, you may be interested in the binary data and
+the filename (if specified).  In the following example we get the
+(optional) filenames and (decoded) body of all attachments, as a
+list of tuples.  The 'attachments' traversal targets non-multipart
+entities with @Content-Disposition: attachment@.  The
+'transferDecoded'' optic undoes the @Content-Transfer-Encoding@ of
+the entity.
 
 @
+λ> :set -XTypeFamilies
 λ> getFilename = preview ('contentDisposition' . _Just . 'filename' 'defaultCharsets')
 λ> getBody = preview ('transferDecoded'' . _Right . 'body')
 λ> getAttachment = liftA2 (,) getFilename getBody
 λ> toListOf ('attachments' . to getAttachment) msg2
-[(Just "data.json",Just "{\"foo\":42}")]
+[(Just "data.json",Just "{\\"foo\\":42}")]
 @
 
 Finally, note that the 'filename' optic takes an argument: it is a
@@ -340,8 +365,8 @@ type CharsetLookup = CI Char8.ByteString -> Maybe Data.MIME.Charset.Charset
 In Australia we say "Hello world" upside down:
 
 @
-λ> msg3 = createTextPlainMessage "ɥǝןןo ʍoɹןp"
-λ> L.putStrLn $ renderMessage msg3
+λ> msg3 = 'createTextPlainMessage' "ɥǝןןo ʍoɹןp"
+λ> Data.ByteString.Lazy.Char8.putStrLn $ 'renderMessage' msg3
 MIME-Version: 1.0
 Content-Transfer-Encoding: base64
 Content-Disposition: inline
@@ -371,7 +396,7 @@ ent :: 'WireEntity'
 λ> text = preview ('transferDecoded'' . _Right . 'charsetText'' 'defaultCharsets' . _Right) ent
 λ> :t text
 text :: Maybe T.Text
-λ> traverse_ T.putStrLn text
+λ> traverse_ Data.Text.IO.putStrLn text
 ɥǝןןo ʍoɹןp
 @
 

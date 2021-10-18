@@ -4,20 +4,25 @@ version:             0.5.0
 synopsis:            types and parser for email messages (including MIME)
 description:
   The purebred email library.  RFC 5322, MIME, etc.
+  See "Data.MIME" for usage, examples and API documentation.
   .
-  Things that are currently implemented:
+  This is a general-purpose library for processing and constructing
+  email messages, originally written to meet the needs of
+  <https://github.com/purebred-mua/purebred purebred MUA>.
+  Transmission and delivery of mail are not part of this library,
+  but /purebred-email/ could be a useful building block for such
+  systems.
   .
-  - RFC 5322 message parsing and serialisation
-  - MIME multipart parsing (RFC 2046) and serialisation
-  - MIME message header extensions for non-ASCII text (RFC 2047)
-  - MIME parameter value and encoded word extensions (RFC 2231)
-  - Content-Disposition header field (RFC 2183)
-  - Message encapsulation (forward/bounce)
+  Features and implemented specifications include:
   .
-  Things that are not yet implemented / need improvement:
-  .
-  - Improve handling of dates
-  - Probably lots of other things
+  - <https://tools.ietf.org/html/rfc5322 RFC 5322> message parsing and serialisation
+  - MIME multipart messages (<https://tools.ietf.org/html/rfc2046 RFC 2046>)
+  - Convenient APIs for replying and forward/bounce
+  - Content transfer and charset decoding/encoding
+  - MIME message header extensions for non-ASCII text (<https://tools.ietf.org/html/rfc2047 RFC 2047>)
+  - MIME parameter value and encoded word extensions (<https://tools.ietf.org/html/rfc2231 RFC 2231>)
+  - @Content-Disposition@ header field (<https://tools.ietf.org/html/rfc2183 RFC 2183>)
+  - Address syntax in @From@ and @Sender@ fields (<https://tools.ietf.org/html/rfc6854 RFC 6854>)
 
 license:             AGPL-3.0-or-later
 license-file:        LICENSE
