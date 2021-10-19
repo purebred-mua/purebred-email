@@ -613,7 +613,25 @@ token :: Parser B.ByteString
 token =
   takeWhile1 (\c -> c >= 33 && c <= 126 && notInClass "()<>@,;:\\\"/[]?=" c)
 
--- | RFC 2046 §4.1.2. defines the default character set to be US-ASCII.
+-- | <https://www.rfc-editor.org/rfc/rfc6657.html RFC 6657>
+-- specifies that each subtype of the @text@ media type can define
+-- its own default value for the @charset@ parameter, including the
+-- absense of any default.  It can also specify that the charset
+-- information is transported inside the payload (such as in
+-- @text/xml@.  Behaviour for common media types includes:
+--
+-- [@text/plain@] Default: @us-ascii@
+--   (<https://www.rfc-editor.org/rfc/rfc6657.html#section-4 RFC 6657>)
+-- [@text/csv@] Default: @utf-8@
+--   (<https://www.rfc-editor.org/rfc/rfc7111.html#section-5.1 RFC 7111>)
+-- [@text/markdown@] No default; @charset@ parameter is REQUIRED
+--   (<https://www.rfc-editor.org/rfc/rfc7763.html#section-2 RFC 7763>)
+-- [@text/enriched@] Default: @us-ascii@
+--   (<https://www.rfc-editor.org/rfc/rfc1896.html RFC 1896>)
+-- [@text/rtf@] Decoded as @us-ascii@.  Serialised RTF must be 7-bit
+--   ASCII, with the character set declared in the payload.
+--   Decoding RTF is outside the scope of this library.
+--   See <https://www.iana.org/assignments/media-types/text/rtf>.
 --
 instance HasCharset ByteEntity where
   type Decoded ByteEntity = TextEntity
@@ -625,12 +643,12 @@ instance HasCharset ByteEntity where
     in
       if typ == "text"
       then case source sub of
-        InBand f -> f (view body ent)
+        InPayload f -> f (view body ent)
         InParameter def -> preview l params <|> def
-        InBandOrParameter f def -> f (view body ent) <|> preview l params <|> def
+        InPayloadOrParameter f -> f (preview l params) (view body ent)
       else
         preview l params <|> Just "us-ascii"
-  charsetData = body -- XXX: do we need to drop the BOM / encoding decl?
+  charsetData = body
   charsetDecoded m = to $ \a -> (\t -> set body t a) <$> view (charsetText m) a
 
   -- | Encode (@utf-8@) and add/set charset parameter.  If consisting
@@ -650,15 +668,18 @@ instance HasCharset ByteEntity where
 -- charset should be determined for some media type.
 --
 data EntityCharsetSource
-  = InBand (B.ByteString -> Maybe CharsetName)
-  -- ^ Charset should be declared within payload (e.g. xml, rtf).
-  --   The given function reads it from the payload.
+  = InPayload (B.ByteString -> Maybe CharsetName)
+  -- ^ Charset should be declared within payload (e.g. rtf).
+  --   The given function reads the payload and returns the charset,
+  --   or @Nothing@ if the charset cannot be determined or defaulted.
   | InParameter (Maybe CharsetName)
-  -- ^ Charset should be declared in the @charset@ parameter,
+  -- ^ Charset may be declared in the @charset@ parameter,
   --   with optional fallback to the given default.
-  | InBandOrParameter (B.ByteString -> Maybe CharsetName) (Maybe CharsetName)
-  -- ^ Check in-band first, fall back to @charset@ parameter,
-  --   and further optionally fall back to a default.
+  | InPayloadOrParameter (Maybe CharsetName -> B.ByteString -> Maybe CharsetName)
+  -- ^ Charset could be specified in payload or parameter.  The function
+  -- parameter takes the value of the charset parameter (which may be @Nothing@
+  -- and the payload, and returns the character set that should be used (or
+  -- @Nothing@ if a character set cannot be determined or defaulted.
 
 -- | Charset sources for text/* media types.  IANA registry:
 -- https://www.iana.org/assignments/media-types/media-types.xhtml#text
@@ -667,18 +688,21 @@ textCharsetSources :: [(CI B.ByteString, EntityCharsetSource)]
 textCharsetSources =
   [ ("plain", InParameter (Just "us-ascii"))
   , ("csv", InParameter (Just "utf-8"))
-  , ("rtf", InBand (const (Just "us-ascii" {- TODO -})))
+  , ("rtf", InPayload (const (Just "us-ascii")))
 
   -- https://tools.ietf.org/html/rfc2854
   -- The default is ambiguous; using us-ascii for now
-  , ("html", InBandOrParameter (const Nothing {-TODO-}) (Just "us-ascii"))
+  , ("html", InPayloadOrParameter (\_param _payload -> Just "us-ascii")) -- FIXME
 
   -- https://tools.ietf.org/html/rfc7763
   , ("markdown", InParameter Nothing)
 
   -- https://tools.ietf.org/html/rfc7303#section-3.2 and
   -- https://www.w3.org/TR/2008/REC-xml-20081126/#charencoding
-  , ("xml", InBand (const (Just "utf-8") {-TODO-}))
+  , ("xml", InPayloadOrParameter (\_param _payload -> Just "utf-8")) -- FIXME
+
+  -- https://tools.ietf.org/html/rfc1896.html
+  , ("enriched", InParameter (Just "us-ascii"))
   ]
 
 -- | @text/plain; charset=us-ascii@
