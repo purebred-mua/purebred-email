@@ -145,16 +145,52 @@ charsets =
   , ("utf-8", utf_8)
   , ("iso-8859-1", iso_8859_1)
 
-  -- uncommon aliases
+  -- us-ascii aliases
   , ("ISO646-US", us_ascii)
   , ("ANSI_X3.4-1968", us_ascii)
+  , ("iso-ir-6", us_ascii)
+  , ("ANSI_X3.4-1986", us_ascii)
+  , ("ISO_646.irv:1991", us_ascii)
+  , ("us", us_ascii)
+  , ("IBM367", us_ascii)
+  , ("cp367", us_ascii)
+  , ("csASCII.4-1968", us_ascii)
 
+  -- iso-8859-1 aliases
+  , ("iso-ir-100", iso_8859_1)
+  , ("ISO_8859-1", iso_8859_1)
+  , ("latin1", iso_8859_1)
+  , ("l1", iso_8859_1)
+  , ("IBM819", iso_8859_1)
+  , ("CP819", iso_8859_1)
+  , ("csISOLatin1", iso_8859_1)
+
+  -- utf-8 aliases
+  , ("csUTF8", utf_8)
+
+  -- utf-16
+  , ("UTF-16BE", utf16be)
+  , ("UTF-16LE", utf16le)
+  , ("UTF-16", utf16)
+  , ("csUTF16BE", utf16be)
+  , ("csUTF16LE", utf16le)
+  , ("csUTF16", utf16)
+
+  -- utf-32
+  , ("UTF-32BE", utf32be)
+  , ("UTF-32LE", utf32le)
+  , ("UTF-32", utf32)
+  , ("csUTF32BE", utf32be)
+  , ("csUTF32LE", utf32le)
+  , ("csUTF32", utf32)
+
+  -- Other charsets I observed in my mail corpus.
   -- , ("iso-8859-2", ...)
   -- , ("iso-8859-15", ...)
   -- , ("iso-2022-jp", ...)    (common)
   -- , ("windows-1252", ...)   (common)
   -- , ("windows-1256", ...)
-  -- , ("cp1252", ...)         (same as windows-1256?)
+  -- , ("cp1252", ...)         (alias of windows-1252)
   -- , ("big5", ...)           (common)
   -- , ("euc-kr", ...)
   -- , ("cp932", ...)
@@ -166,10 +202,29 @@ us_ascii = decodeLenient
 utf_8 = decodeLenient
 iso_8859_1 = T.decodeLatin1
 
+utf16be, utf16le, utf16 :: Charset
+utf16be = T.decodeUtf16BEWith T.lenientDecode
+utf16le = T.decodeUtf16LEWith T.lenientDecode
+-- https://www.rfc-editor.org/rfc/rfc2781.html#section-4.3
+utf16 b = case B.take 2 b of
+  "\xff\xfe"  -> utf16le b
+  _           -> utf16be b
+
+utf32be, utf32le, utf32 :: Charset
+utf32be = T.decodeUtf32BEWith T.lenientDecode
+utf32le = T.decodeUtf32LEWith T.lenientDecode
+-- Unicode 4.0, Section 3.10, D45
+-- https://www.unicode.org/versions/Unicode4.0.0/ch03.pdf#G7404
+utf32 b = case B.take 4 b of
+  "\xff\xfe\x00\x00"  -> utf32le b
+  _                   -> utf32be b
+
 
 type CharsetLookup = CI.CI B.ByteString -> Maybe Charset
 
--- | Supports US-ASCII, UTF-8 and ISO-8859-1.
+-- | Supports US-ASCII, UTF-8 and ISO-8859-1, UTF-16[BE|LE]
+-- and UTF-32[BE|LE].  The /purebred-icu/ package provides
+-- support for more charsets.
 --
 defaultCharsets :: CharsetLookup
 defaultCharsets k = lookup k charsets
