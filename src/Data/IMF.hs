@@ -919,7 +919,7 @@ parsePrint fwd rev = prism' rev (AL.maybeResult . AL.parse fwd . view recons)
 
 -- | Parse an @a@.
 --
--- The input is convered to a /lazy/ @ByteString@.
+-- Converts the input to a /lazy/ @ByteString@.
 -- Build with rewrite rules enabled (@-O@, cabal's default)
 -- to achieve the following conversion overheads:
 --

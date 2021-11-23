@@ -580,7 +580,7 @@ instance Eq ContentType where
 -- and throws an error if the parse fails
 --
 instance IsString ContentType where
-  fromString = either err id . parseOnly parseContentType . C8.pack
+  fromString = either err id . parseOnly (parseContentType <* endOfInput) . C8.pack
     where
     err msg = error $ "failed to parse Content-Type: " <> msg
 
@@ -806,7 +806,8 @@ contentType = headers . lens sa sbt where
   sa s = case view cte s of
     Nothing -> contentTypeApplicationOctetStream
     Just _ ->
-      fromMaybe defaultContentType $ preview (ct . parsed parseContentType) s
+      fromMaybe defaultContentType
+      $ preview (ct . parsed (parseContentType <* endOfInput)) s
 
   sbt s b = set (at "Content-Type") (Just (renderContentType b)) s
 
@@ -870,7 +871,7 @@ renderContentDisposition (ContentDisposition typ params) =
 --
 contentDisposition :: HasHeaders a => Lens' a (Maybe ContentDisposition)
 contentDisposition = headers . at "Content-Disposition" . dimap
-  (>>= either (const Nothing) Just . Data.IMF.parse parseContentDisposition)
+  (>>= either (const Nothing) Just . Data.IMF.parse (parseContentDisposition <* endOfInput))
   (fmap . fmap $ renderContentDisposition)
 
 -- | Traverse the value of the filename parameter (if present).
@@ -1000,7 +1001,7 @@ mime' takeTillEnd h = RequiredBody $ case view contentType h of
                                     maybe
                                       (Left $ InvalidParameterValue "type" s)
                                       (Right . Just)
-                                      (preview (parsed parseContentType) s)
+                                      (preview (parsed (parseContentType <* endOfInput)) s)
                               )
                           <*> ( getOptionalParam "start" ct >>= \case
                                   Nothing -> pure Nothing
