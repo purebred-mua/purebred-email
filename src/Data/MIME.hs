@@ -18,6 +18,7 @@
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE TypeFamilies #-}
@@ -438,19 +439,40 @@ data MultipartSubtype
   -- Independent body parts, order not significants.  Parts may be
   -- displayed in parallel if the system supports it.
   | Related
-      ContentType {- ^ @type@ -}
-      (Maybe B.ByteString) {- ^ @start@ -}
-      (Maybe B.ByteString) {- ^ @start-info@ -}
-  -- ^ <https://www.rfc-editor.org/rfc/rfc2387.html RFC 2387.>
-  -- Aggregate or compound objects.
-  | Signed B.ByteString {- ^ protocol -} B.ByteString {- ^ micalg -}
+  -- ^ Aggregate or compound objects.  Per
+  -- <https://www.rfc-editor.org/rfc/rfc2387.html RFC 2387> the
+  -- @type@ parameter is required.  Sadly some major producers omit
+  -- it, so this constructor must admit that case.  See
+  -- https://github.com/purebred-mua/purebred-email/issues/68.
+      (Maybe ContentType)
+      -- ^ The @type@ parameter must be specified and its value is
+      -- the MIME media type of the "root" body part.  It permits a
+      -- MIME user agent to determine the @Content-Type@ without
+      -- reference to the enclosed body part.  If the value of the
+      -- @type@ parameter and the root body part's @Content-Type@
+      -- differ then the User Agent's behavior is undefined.
+      (Maybe B.ByteString)
+      -- ^ The @start@ parameter, if given, points, via a
+      -- @Content-ID@, to the body part that contains the object
+      -- root.  The default root is the first body part within the
+      -- @multipart/related@ body.
+      (Maybe B.ByteString)
+      -- ^ @start-info@ parameter.  Applications that use
+      -- @multipart/related@ must specify the interpretation of
+      -- @start-info@.  User Agents shall provide the parameter's
+      -- value to the processing application.
+  | Signed
   -- ^ <https://www.rfc-editor.org/rfc/rfc1847.html#section-2.1 RFC 1847 §2.1.>
   -- Signed messages.
-  | Encrypted B.ByteString {- protocol -}
+      B.ByteString {- ^ protocol -}
+      B.ByteString {- ^ micalg -}
+  | Encrypted
   -- ^ <https://www.rfc-editor.org/rfc/rfc1847.html#section-2.2 RFC 1847 §2.2.>
-  | Report B.ByteString {- report-type -}
+      B.ByteString {- ^ protocol -}
+  | Report
   -- ^ <https://www.rfc-editor.org/rfc/rfc6522.html RFC 6522>.
   -- Electronic mail reports.
+      B.ByteString {- ^ report-type -}
   | Multilingual
   -- ^ <https://www.rfc-editor.org/rfc/rfc8255.html RFC 8255>.
   -- Multilingual messages.  The first part should be a multilingual
@@ -740,7 +762,7 @@ contentTypeMultipart subtype boundary =
         ( "related"
         , maybe id (setParam "start") start
           . maybe id (setParam "start-info") startInfo
-          . setParam "type" (renderContentType typ)
+          . maybe id (setParam "type" . renderContentType) typ
         )
       Unrecognised sub' -> (sub', id)
 
@@ -926,9 +948,13 @@ mime' takeTillEnd h = RequiredBody $ case view contentType h of
                           <*> getRequiredParam "micalg" ct
       "encrypted"     -> Encrypted <$> getRequiredParam "protocol" ct
       "related"       -> Related
-                          <$> ( getRequiredParam "type" ct
-                              >>= \s -> maybe (Left $ InvalidParameterValue "type" s) Right
-                                          (preview (parsed parseContentType) s)
+                          <$> ( getOptionalParam "type" ct >>= \case
+                                  Nothing -> pure Nothing
+                                  Just s ->
+                                    maybe
+                                      (Left $ InvalidParameterValue "type" s)
+                                      (Right . Just)
+                                      (preview (parsed parseContentType) s)
                               )
                           <*> getOptionalParam "start" ct
                           <*> getOptionalParam "start-info" ct
