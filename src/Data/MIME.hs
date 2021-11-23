@@ -103,6 +103,14 @@ module Data.MIME
   , filenameParameter
   , renderContentDisposition
 
+  -- *** Content-ID header
+  , ContentID
+  , makeContentID
+  , parseContentID
+  , buildContentID
+  , renderContentID
+  , headerContentID
+
   -- ** Mail creation
   -- *** Common use cases
   , createTextPlainMessage
@@ -136,6 +144,7 @@ import Data.Attoparsec.ByteString.Char8 (char8)
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Char8 as C8
 import qualified Data.ByteString.Builder as Builder
+import qualified Data.ByteString.Lazy as L
 import qualified Data.CaseInsensitive as CI
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
@@ -881,6 +890,43 @@ filename m = filenameParameter . traversed . charsetPrism m . value
 -- @
 filenameParameter :: HasParameters a => Lens' a (Maybe EncodedParameterValue)
 filenameParameter = parameter "filename"
+
+
+-- | The @Content-ID@ value may be used for uniquely identifying
+-- MIME entities in several contexts, particularly for caching data
+-- referenced by the @message/external-body@ mechanism.  Although
+-- the @Content-ID@ header is generally optional, its use is
+-- MANDATORY in implementations which generate data of the optional
+-- MIME media type @message/external-body@.  That is, each
+-- @message/external-body@ entity must have a @Content-ID@ field to
+-- permit caching of such data.
+--
+newtype ContentID = ContentID MessageID
+  deriving (Eq)
+
+instance Show ContentID where
+  show = C8.unpack . renderContentID
+
+parseContentID :: Parser ContentID
+parseContentID = ContentID <$> parseMessageID
+
+buildContentID :: ContentID -> Builder.Builder
+buildContentID (ContentID mid) = buildMessageID mid
+
+renderContentID :: ContentID -> B.ByteString
+renderContentID = L.toStrict . Builder.toLazyByteString . buildContentID
+
+makeContentID :: B.ByteString -> Either B.ByteString ContentID
+makeContentID s =
+  either (const $ Left s) Right
+  . parseOnly (parseContentID <* endOfInput)
+  $ s
+
+headerContentID :: (HasHeaders a) => Lens' a (Maybe ContentID)
+headerContentID = headers . at "Content-ID" . iso (>>= f) (fmap g)
+  where
+  f = either (const Nothing) Just . parseOnly (parseContentID <* endOfInput)
+  g = renderContentID
 
 
 -- | Traversal of @boundary@ parameter (which may be unspecified)
