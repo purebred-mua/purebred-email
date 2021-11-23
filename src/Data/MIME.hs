@@ -460,7 +460,7 @@ data MultipartSubtype
       -- reference to the enclosed body part.  If the value of the
       -- @type@ parameter and the root body part's @Content-Type@
       -- differ then the User Agent's behavior is undefined.
-      (Maybe B.ByteString)
+      (Maybe ContentID)
       -- ^ The @start@ parameter, if given, points, via a
       -- @Content-ID@, to the body part that contains the object
       -- root.  The default root is the first body part within the
@@ -769,7 +769,7 @@ contentTypeMultipart subtype boundary =
       Encrypted proto -> ("encrypted", setParam "protocol" proto)
       Related typ start startInfo ->
         ( "related"
-        , maybe id (setParam "start") start
+        , maybe id (setParam "start" . renderContentID) start
           . maybe id (setParam "start-info") startInfo
           . maybe id (setParam "type" . renderContentType) typ
         )
@@ -1002,7 +1002,14 @@ mime' takeTillEnd h = RequiredBody $ case view contentType h of
                                       (Right . Just)
                                       (preview (parsed parseContentType) s)
                               )
-                          <*> getOptionalParam "start" ct
+                          <*> ( getOptionalParam "start" ct >>= \case
+                                  Nothing -> pure Nothing
+                                  Just s ->
+                                    maybe
+                                      (Left $ InvalidParameterValue "start" s)
+                                      (Right . Just)
+                                      (preview (parsed (parseContentID <* endOfInput)) s)
+                              )
                           <*> getOptionalParam "start-info" ct
       unrecognised    -> pure $ Unrecognised unrecognised
 
