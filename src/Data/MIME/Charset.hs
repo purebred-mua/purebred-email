@@ -155,6 +155,7 @@ charsets =
   , ("IBM367", us_ascii)
   , ("cp367", us_ascii)
   , ("csASCII.4-1968", us_ascii)
+  , ("ascii", us_ascii)  -- https://github.com/purebred-mua/purebred-email/issues/69
 
   -- iso-8859-1 aliases
   , ("iso-ir-100", iso_8859_1)
