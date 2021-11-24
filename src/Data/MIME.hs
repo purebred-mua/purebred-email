@@ -566,15 +566,12 @@ caseInsensitive = iso CI.mk CI.original
 -- is non-total (throws an error if it cannot parse the string).
 --
 data ContentType = ContentType (CI B.ByteString) (CI B.ByteString) Parameters
-  deriving (Show, Generic, NFData)
-
--- | Equality of Content-Type. Type and subtype are compared
--- case-insensitively and parameters are also compared.  Use
--- 'matchContentType' if you just want to match on the media type
--- while ignoring parameters.
---
-instance Eq ContentType where
-  ContentType a b c == ContentType a' b' c' = a == a' && b == b' && c == c'
+  deriving
+    ( Show, Generic, NFData,
+      Eq  -- ^ Compares type and subtype case-insensitively; parameters
+          -- are also compared.  Use 'matchContentType' if you just want
+          -- to match on the media type while ignoring parameters.
+    )
 
 -- | __NON-TOTAL__ parses the Content-Type (including parameters)
 -- and throws an error if the parse fails
