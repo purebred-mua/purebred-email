@@ -18,7 +18,6 @@
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE TypeFamilies #-}
@@ -980,6 +979,12 @@ mime' takeTillEnd h = RequiredBody $ case view contentType h of
       maybe (Left $ RequiredParameterMissing k) Right . preview (rawParameter k)
     getOptionalParam k =
       Right . preview (rawParameter k)
+    getOptionalParamParsed k parser ct =
+      case preview (rawParameter k) ct of
+        Nothing -> Right Nothing
+        Just s  -> case Data.IMF.parse (parser <* endOfInput) s of
+          Left _  -> Left $ InvalidParameterValue k s
+          Right a -> Right $ Just a
     parseSubtype ct = case view ctSubtype ct of
       "mixed"         -> pure Mixed
       "alternative"   -> pure Alternative
@@ -992,22 +997,8 @@ mime' takeTillEnd h = RequiredBody $ case view contentType h of
                           <*> getRequiredParam "micalg" ct
       "encrypted"     -> Encrypted <$> getRequiredParam "protocol" ct
       "related"       -> Related
-                          <$> ( getOptionalParam "type" ct >>= \case
-                                  Nothing -> pure Nothing
-                                  Just s ->
-                                    maybe
-                                      (Left $ InvalidParameterValue "type" s)
-                                      (Right . Just)
-                                      (preview (parsed (parseContentType <* endOfInput)) s)
-                              )
-                          <*> ( getOptionalParam "start" ct >>= \case
-                                  Nothing -> pure Nothing
-                                  Just s ->
-                                    maybe
-                                      (Left $ InvalidParameterValue "start" s)
-                                      (Right . Just)
-                                      (preview (parsed (parseContentID <* endOfInput)) s)
-                              )
+                          <$> getOptionalParamParsed "type" parseContentType ct
+                          <*> getOptionalParamParsed "start" parseContentID ct
                           <*> getOptionalParam "start-info" ct
       unrecognised    -> pure $ Unrecognised unrecognised
 
