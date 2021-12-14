@@ -387,7 +387,36 @@ mailbox charsets =
 
 phrase :: CharsetLookup -> Parser T.Text
 phrase charsets = foldMany1Sep " " $
-  fmap (decodeEncodedWord charsets) ("=?" *> encodedWord)
+  -- RFC 2047 §2: if it is desirable to encode more text than will
+  -- fit in an 'encoded-word' of 75 characters, multiple
+  -- 'encoded-word's (separated by CRLF SPACE) may be used.
+  --
+  -- The initial header parsing unfolds the header, so such
+  -- "continuation" encoded-words are now separated by SPACE.  The
+  -- CRLFs have been erased.  Naïvely, this seems to make this case
+  -- indistinguishable from "consecutive" encoded-words that were
+  -- actually separated by SPACE.  However, a careful examination of
+  -- the grammar shows that encoded-words in a 'phrase' cannot be
+  -- separated by whitespace:
+  --
+  -- @
+  -- phrase         = 1*( encoded-word / word )
+  -- encoded-word   = "=?" charset "?" encoding "?" encoded-text "?="
+  -- word           = atom / quoted-string
+  -- atom           = [CFWS] 1*atext [CFWS]
+  -- quoted-string  = [CFWS]
+  --                  DQUOTE *([FWS] qcontent) [FWS] DQUOTE
+  --                  [CFWS]
+  -- @
+  --
+  -- The only place whitespace is allowed is within 'atom' and
+  -- 'quoted-string'.  Therefore two encoded-words separated by
+  -- SPACE must be the result of folding a long encoded-word.  So
+  -- consume as many SPACE separated encoded-words as possible,
+  -- decode them, and concatenate the result.
+  fmap
+    ( foldMap (decodeEncodedWord charsets) )
+    ( ("=?" *> encodedWord) `sepBy1` char8 ' ' )
   <|> fmap decodeLenient word
 
 displayName :: CharsetLookup -> Parser T.Text
