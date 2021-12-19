@@ -76,7 +76,7 @@ module Data.IMF.Syntax
   ) where
 
 import Prelude hiding (takeWhile)
-import Control.Applicative ((<|>), Alternative, liftA2, many, optional)
+import Control.Applicative ((<|>), Alternative, liftA2, many, optional, some)
 import Control.Monad (void)
 import qualified Data.Attoparsec.ByteString as A
 import qualified Data.Attoparsec.Internal as A
@@ -191,8 +191,24 @@ crlf = void ((char '\r' *> char '\n') <|> char '\n')
 -- | Folding white space (FWS).  A run of one or more whitespace
 -- characters.  Returns a single SPACE character.
 fws :: (Alternative (f s), CharParsing f s a) => (f s) s
-fws = ( optional (takeWhile isWsp *> crlf) *> takeWhile1 isWsp )
-      $> singleton ' '
+fws =
+  -- obs-FWS is more permissive, so must come first.  This means
+  -- that the second branch is unused, but keep it anyway for
+  -- completeness.
+  obsFWS
+  <|>
+  --    FWS             =   ([*WSP CRLF] 1*WSP) /  obs-FWS
+  optional (takeWhile isWsp *> crlf) *> takeWhile1 isWsp $> singleton ' '
+
+-- | Obsolete Folding White Space:
+-- https://www.rfc-editor.org/errata/eid1908
+--
+-- @
+-- obs-FWS         =   1*([CRLF] WSP)
+-- @
+--
+obsFWS :: (Alternative (f s), CharParsing f s a) => (f s) s
+obsFWS = some (optional crlf *> wsp) $> singleton ' '
 
 -- | FWS collapsed to a single SPACE character, or empty string
 --
