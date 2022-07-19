@@ -20,7 +20,8 @@ module Parser where
 
 import Data.Either (isLeft)
 
-import Data.Attoparsec.ByteString.Lazy as AL
+import Data.Attoparsec.ByteString.Lazy as AL hiding (parseOnly)
+import Data.Attoparsec.ByteString (parseOnly)
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Char8 as Char8
 import qualified Data.ByteString.Lazy as L
