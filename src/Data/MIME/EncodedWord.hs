@@ -56,6 +56,8 @@ import Data.MIME.Base64
 import Data.MIME.QuotedPrintable
 import Data.IMF.Syntax (ci, takeTillString)
 
+{-# ANN module ("HLint: ignore Eta reduce" :: String) #-}
+
 data EncodedWord = EncodedWord
   { _encodedWordCharset :: CI.CI B.ByteString
   , _encodedWordLanguage :: Maybe (CI.CI B.ByteString)
