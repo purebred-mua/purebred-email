@@ -486,7 +486,7 @@ entities f (Message h a) = case a of
     (\(Message h' b') -> Message h' (Part b')) <$> f (Message h b)
   Encapsulated msg -> Message h . Encapsulated <$> entities f msg
   Multipart sub b bs ->
-    Message h . Multipart sub b <$> sequenceA (entities f <$> bs)
+    Message h . Multipart sub b <$> traverse (entities f) bs
   FailedParse _ _ -> pure (Message h a)
 
 -- | Leaf entities with @Content-Disposition: attachment@
