@@ -14,7 +14,6 @@
 -- You should have received a copy of the GNU Affero General Public License
 -- along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-{-# LANGUAGE CPP #-}
 {-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE FunctionalDependencies #-}
@@ -98,11 +97,7 @@ import Data.Word (Word8)
 
 -- | Constraint synonym to handle the Semigroup Monoid Proposal
 -- transition gracefully.
-#if MIN_VERSION_base(4,11,0)
 type SM a = Monoid a
-#else
-type SM a = (Semigroup a, Monoid a)
-#endif
 
 class IsChar a where
   toChar :: a -> Char
