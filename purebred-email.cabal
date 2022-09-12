@@ -143,7 +143,6 @@ test-suite tests
     , tasty-hunit
     , tasty-golden
     , hedgehog
-    , QuickCheck
     , quickcheck-instances
 
 executable purebred-email-parse
