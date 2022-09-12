@@ -70,7 +70,8 @@ module Data.MIME
 
   -- ** Content-Type header
   , contentType
-  , ContentType(..)
+  , ContentTypeWith(..)
+  , ContentType
   , ctType
   , ctSubtype
   , matchContentType
@@ -130,6 +131,7 @@ module Data.MIME
   ) where
 
 import Control.Applicative
+import Control.Monad (when)
 import Data.Foldable (fold)
 import Data.List.NonEmpty (NonEmpty, fromList, intersperse)
 import Data.Maybe (fromMaybe)
@@ -452,7 +454,7 @@ data MultipartSubtype
   -- @type@ parameter is required.  Sadly some major producers omit
   -- it, so this constructor must admit that case.  See
   -- https://github.com/purebred-mua/purebred-email/issues/68.
-      (Maybe ContentType)
+      (Maybe (ContentTypeWith ()))
       -- ^ The @type@ parameter must be specified and its value is
       -- the MIME media type of the "root" body part.  It permits a
       -- MIME user agent to determine the @Content-Type@ without
@@ -553,8 +555,8 @@ caseInsensitive = iso CI.mk CI.original
 {-# INLINE caseInsensitive #-}
 
 
--- | Content-Type header (RFC 2183).
--- Use 'parameters' to access the parameters.
+-- | Content-Type (type and subtype) with explicit parameters type.
+-- Use 'parameters' to access the parameters field.
 -- Example:
 --
 -- @
@@ -564,13 +566,15 @@ caseInsensitive = iso CI.mk CI.original
 -- You can also use @-XOverloadedStrings@ but be aware the conversion
 -- is non-total (throws an error if it cannot parse the string).
 --
-data ContentType = ContentType (CI B.ByteString) (CI B.ByteString) Parameters
+data ContentTypeWith a = ContentType (CI B.ByteString) (CI B.ByteString) a
   deriving
     ( Show, Generic, NFData,
       Eq  -- ^ Compares type and subtype case-insensitively; parameters
           -- are also compared.  Use 'matchContentType' if you just want
           -- to match on the media type while ignoring parameters.
     )
+
+type ContentType = ContentTypeWith Parameters
 
 -- | __NON-TOTAL__ parses the Content-Type (including parameters)
 -- and throws an error if the parse fails
@@ -586,26 +590,29 @@ instance IsString ContentType where
 matchContentType
   :: CI B.ByteString         -- ^ type
   -> Maybe (CI B.ByteString) -- ^ optional subtype
-  -> ContentType
+  -> ContentTypeWith a
   -> Bool
 matchContentType wantType wantSubtype (ContentType gotType gotSubtype _) =
   wantType == gotType && maybe True (== gotSubtype) wantSubtype
 
 renderContentType :: ContentType -> B.ByteString
-renderContentType (ContentType typ sub params) =
-  CI.original typ <> "/" <> CI.original sub <> printParameters params
+renderContentType = renderContentTypeWith printParameters
+
+renderContentTypeWith :: (a -> B.ByteString) -> ContentTypeWith a -> B.ByteString
+renderContentTypeWith renderParams (ContentType typ sub params) =
+  CI.original typ <> "/" <> CI.original sub <> renderParams params
 
 printParameters :: Parameters -> B.ByteString
 printParameters (Parameters xs) =
   foldMap (\(k,v) -> "; " <> CI.original k <> "=" <> v) xs
 
-ctType :: Lens' ContentType (CI B.ByteString)
+ctType :: Lens' (ContentTypeWith a) (CI B.ByteString)
 ctType f (ContentType a b c) = fmap (\a' -> ContentType a' b c) (f a)
 
-ctSubtype :: Lens' ContentType (CI B.ByteString)
+ctSubtype :: Lens' (ContentTypeWith a) (CI B.ByteString)
 ctSubtype f (ContentType a b c) = fmap (\b' -> ContentType a b' c) (f b)
 
-ctParameters :: Lens' ContentType Parameters
+ctParameters :: Lens (ContentTypeWith a) (ContentTypeWith b) a b
 ctParameters f (ContentType a b c) = fmap (\c' -> ContentType a b c') (f c)
 {-# ANN ctParameters ("HLint: ignore Avoid lambda" :: String) #-}
 
@@ -618,16 +625,24 @@ instance HasParameters ContentType where
 
 -- | Parser for Content-Type header
 parseContentType :: Parser ContentType
-parseContentType = do
+parseContentType = parseContentTypeWith go
+  where
+  go typ _subtype = do
+    params <- parseParameters
+    when (typ == "multipart" && "boundary" `notElem` fmap fst params) $
+      -- https://tools.ietf.org/html/rfc2046#section-5.1.1
+      fail "\"boundary\" parameter is required for multipart content type"
+    pure $ Parameters params
+
+parseContentTypeWith
+  :: (CI B.ByteString -> CI B.ByteString -> Parser a)
+  -> Parser (ContentTypeWith a)
+parseContentTypeWith p = do
   typ <- ci token
   _ <- char8 '/'
   subtype <- ci token
-  params <- parseParameters
-  if typ == "multipart" && "boundary" `notElem` fmap fst params
-    then
-      -- https://tools.ietf.org/html/rfc2046#section-5.1.1
-      fail "\"boundary\" parameter is required for multipart content type"
-    else pure $ ContentType typ subtype (Parameters params)
+  params <- p typ subtype
+  pure $ ContentType typ subtype params
 
 parseParameters :: Parser [(CI B.ByteString, B.ByteString)]
 parseParameters = many (char8 ';' *> skipWhile (== 32 {-SP-}) *> param)
@@ -767,7 +782,7 @@ contentTypeMultipart subtype boundary =
         ( "related"
         , maybe id (setParam "start" . renderContentID) start
           . maybe id (setParam "start-info") startInfo
-          . maybe id (setParam "type" . renderContentType) typ
+          . maybe id (setParam "type" . renderContentTypeWith (\() -> "")) typ
         )
       Unrecognised sub' -> (sub', id)
 
@@ -997,7 +1012,8 @@ mime' takeTillEnd h = RequiredBody $ case view contentType h of
                           <*> getRequiredParam "micalg" ct
       "encrypted"     -> Encrypted <$> getRequiredParam "protocol" ct
       "related"       -> Related
-                          <$> getOptionalParamParsed "type" parseContentType ct
+                          <$> getOptionalParamParsed "type"
+                                (parseContentTypeWith (\_ _ -> pure ())) ct
                           <*> getOptionalParamParsed "start" parseContentID ct
                           <*> getOptionalParam "start-info" ct
       unrecognised    -> pure $ Unrecognised unrecognised

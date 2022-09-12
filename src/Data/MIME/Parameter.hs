@@ -39,6 +39,7 @@ This module provides types and functions for working with parameters.
 module Data.MIME.Parameter
   (
     Parameters(..)
+  , emptyParameters
   , parameterList
   , parameter
   , rawParameter
@@ -106,6 +107,10 @@ instance Ixed Parameters where
     l f kv = case getParameter k kv of
       Nothing -> pure kv
       Just v -> (\v' -> setParam k v' kv) <$> f v
+
+-- | Same as 'mempty', but useful where the type would otherwise be ambiguous.
+emptyParameters :: Parameters
+emptyParameters = mempty
 
 -- | Set the parameter (which may need to use the parameter
 -- continuation mechanism).

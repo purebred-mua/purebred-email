@@ -188,7 +188,7 @@ testParameterValueOverloadedStrings = testGroup "ParameterValue IsString instanc
 
 testContentTypeOverloadedStrings :: TestTree
 testContentTypeOverloadedStrings = testGroup "ContentType fromString"
-  [ testCase "no params" $ fromString "foo/bar" @?= ContentType "foo" "bar" mempty
+  [ testCase "no params" $ fromString "foo/bar" @?= ContentType "foo" "bar" emptyParameters
   , testCase "params" $ fromString "foo/bar; baz=quux" @?= ContentType "foo" "bar" (Parameters [("baz", "quux")])
   , testCase "bogus" $
       (isLeft <$> (try . evaluate $ fromString "foo/; baz=quux" :: IO (Either ErrorCall ContentType)))
