@@ -14,7 +14,7 @@
 
   [RFC 2387][] requires the `type` parameter.  Nevertheless some
   producers, including GMail and Fastmail, generate non-conformant
-  messages without the `type` parameter.  What the `Related`
+  messages without the `type` parameter.  Wrap the `Related`
   constructor's `ContentType` field in a `Maybe`. ([#68][])
 
 - Introduce the `ContentID` type and use it for the
