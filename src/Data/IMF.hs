@@ -73,7 +73,7 @@ number of headers and the body length.  The message context type is
 @
 analyse :: B.ByteString -> IO ()
 analyse input =
-  case 'parse' ('message' (const takeByteString)) of
+  case 'parse' ('message' (const takeByteString)) input of
     Left errMsg -> hPutStrLn stderr errMsg *> exitFailure
     Right (msg :: Message () B.ByteString) -> do
       T.putStrLn $ "subject: " <> foldOf ('headerSubject' 'defaultCharsets') msg
