@@ -1,6 +1,6 @@
 cabal-version:       2.2
 name:                purebred-email
-version:             0.6.0.1
+version:             0.6.0.2
 synopsis:            types and parser for email messages (including MIME)
 description:
   The purebred email library.  RFC 5322, MIME, etc.
