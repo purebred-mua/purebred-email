@@ -147,10 +147,11 @@ test-suite tests
     , quickcheck-instances
 
 executable purebred-email-parse
-  import: common
   if !flag(demos)
     buildable: False
   hs-source-dirs: tools
   main-is: Parse.hs
   build-depends:
+    base
+    , bytestring
     , purebred-email
