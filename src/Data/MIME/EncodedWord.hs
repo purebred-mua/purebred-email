@@ -54,7 +54,7 @@ import Data.MIME.Error (EncodingError)
 import Data.MIME.TransferEncoding
 import Data.MIME.Base64
 import Data.MIME.QuotedPrintable
-import Data.IMF.Syntax (ci, takeTillString)
+import Data.IMF.Syntax (ci, takeTillString, optionalCFWS)
 
 {-# ANN module ("HLint: ignore Eta reduce" :: String) #-}
 
@@ -162,11 +162,12 @@ decodeEncodedWords :: CharsetLookup -> B.ByteString -> T.Text
 decodeEncodedWords charsets s =
   either (const (decodeLenient s)) (foldMap conv) (parseOnly tokens s)
   where
-    tokens :: Parser [Either B.ByteString EncodedWord]
+    tokens :: Parser [Either B.ByteString [EncodedWord]]
     tokens = liftA2 (:) (Left <$> takeTillString "=?") more
           <|> ((:[]) . Left <$> takeByteString)
-    more = liftA2 (:) (Right <$> encodedWord <|> pure (Left "=?")) tokens
-    conv = either decodeLenient (decodeEncodedWord charsets)
+    more = liftA2 (:) (Right <$> (encodedWord `sepBy1'` (optionalCFWS <* string "=?"))
+                             <|> pure (Left "=?")) tokens
+    conv = either decodeLenient (T.concat .  map (decodeEncodedWord charsets))
 
 -- | Decode an 'EncodedWord'.  If transfer or charset decoding fails,
 -- returns the serialised encoded word.
