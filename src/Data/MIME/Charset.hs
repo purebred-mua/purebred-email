@@ -56,6 +56,15 @@ import qualified Data.CaseInsensitive as CI
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
 import qualified Data.Text.Encoding.Error as T
+import Data.Encoding
+import Data.Encoding.CP1251
+import Data.Encoding.CP1252
+import Data.Encoding.CP1256
+import Data.Encoding.CP932
+import Data.Encoding.ISO2022JP
+import Data.Encoding.ISO885915
+import Data.Encoding.ISO88592
+import Data.Encoding.KOI8R
 
 {-# ANN module ("HLint: ignore Use camelCase" :: String) #-}
 
@@ -186,16 +195,19 @@ charsets =
   , ("csUTF32", utf32)
 
   -- Other charsets I observed in my mail corpus.
-  -- , ("iso-8859-2", ...)
-  -- , ("iso-8859-15", ...)
-  -- , ("iso-2022-jp", ...)    (common)
-  -- , ("windows-1252", ...)   (common)
-  -- , ("windows-1256", ...)
-  -- , ("cp1252", ...)         (alias of windows-1252)
+  , ("iso-8859-2", iso_8859_2)
+  , ("iso-8859-15", iso_8859_15)
+  , ("iso-2022-jp", iso_2022_jp)
+  , ("windows-1251", cp1251) -- (Russian)
+  , ("windows-1252", cp1252)
+  , ("windows-1256", cp1256)
+  , ("cp1251", cp1251)       -- (Russian)
+  , ("cp1252", cp1252)
   -- , ("big5", ...)           (common)
   -- , ("euc-kr", ...)
-  -- , ("cp932", ...)
+  , ("cp932", cp932)          -- (Japanese)
   -- , ("gb2312", ...)         (Chinese)
+  , ("koi8-r", koi8_r)        -- (Russian)
   ]
 
 us_ascii, utf_8, iso_8859_1 :: Charset
@@ -220,6 +232,29 @@ utf32 b = case B.take 4 b of
   "\xff\xfe\x00\x00"  -> utf32le b
   _                   -> utf32be b
 
+cp932 :: Charset
+cp932 = T.pack . decodeStrictByteString CP932
+
+cp1251 :: Charset
+cp1251 = T.pack . decodeStrictByteString CP1251
+
+cp1252 :: Charset
+cp1252 = T.pack . decodeStrictByteString CP1252
+
+cp1256 :: Charset
+cp1256 = T.pack . decodeStrictByteString CP1256
+
+iso_2022_jp :: Charset
+iso_2022_jp = T.pack . decodeStrictByteString ISO2022JP
+
+iso_8859_2 :: Charset
+iso_8859_2 = T.pack . decodeStrictByteString ISO88592
+
+iso_8859_15 :: Charset
+iso_8859_15 = T.pack . decodeStrictByteString ISO885915
+
+koi8_r :: Charset
+koi8_r = T.pack . decodeStrictByteString KOI8R
 
 type CharsetLookup = CI.CI B.ByteString -> Maybe Charset
 
