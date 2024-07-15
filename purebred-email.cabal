@@ -37,7 +37,7 @@ extra-source-files:
   test-vectors/*.eml
   tests/golden/*.golden
 tested-with:
-  GHC ==8.8.4 || ==8.10.7 || ==9.0.2 || ==9.2.7 || ==9.4.7 || ==9.6.3 || ==9.8.1
+  GHC ==8.8.4 || ==8.10.7 || ==9.0.2 || ==9.2.8 || ==9.4.8 || ==9.6.6 || ==9.8.2 || ==9.10.1
 
 homepage:            https://github.com/purebred-mua/purebred-email
 bug-reports:         https://github.com/purebred-mua/purebred-email/issues
