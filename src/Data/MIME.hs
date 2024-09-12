@@ -734,7 +734,8 @@ textCharsetSources =
 
   -- https://tools.ietf.org/html/rfc2854
   -- The default is ambiguous; using us-ascii for now
-  , ("html", InPayloadOrParameter (\_param _payload -> Just "us-ascii")) -- FIXME
+  -- TODO: perhaps analyze html content to determine charset
+  , ("html", InPayloadOrParameter (\param _payload -> param <|> Just "us-ascii"))
 
   -- https://tools.ietf.org/html/rfc7763
   , ("markdown", InParameter Nothing)
