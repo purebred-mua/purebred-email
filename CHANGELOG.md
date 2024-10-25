@@ -1,3 +1,11 @@
+## Next
+
+- Support UTF-8 in `Subject` and other unstructured headers.
+  ([#82])
+
+[#82]: https://github.com/purebred-mua/purebred-email/issues/82
+
+
 ## Version 0.6 (2022-09-13)
 
 - Parameterise the `ContentType` data type over the "parameters"

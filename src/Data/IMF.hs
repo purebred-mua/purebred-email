@@ -211,7 +211,7 @@ import Data.IMF.Syntax
   ( CI, ci, mk, original
   , (<<>>), foldMany, foldMany1Sep
   , char, fromChar, isAtext, isQtext, isVchar, isWsp
-  , optionalCFWS, word, wsp, vchar, optionalFWS, crlf
+  , optionalCFWS, word, wsp, vcharUtf8, optionalFWS, crlf
   , domainLiteral, dotAtom, dotAtomText, localPart, quotedString
   )
 import {-# SOURCE #-} Data.IMF.Text (readMailbox)
@@ -899,9 +899,10 @@ field = (,)
   <*  char8 ':' <* many wsp
   <*> unstructured <* crlf
 
+-- | UTF-8 unstructured text
 unstructured :: Parser B.ByteString
 unstructured =
-  foldMany (optionalFWS <<>> (B.singleton <$> vchar))
+  foldMany (optionalFWS <<>> fmap B.pack vcharUtf8)
   <<>> A.takeWhile isWsp
 
 
