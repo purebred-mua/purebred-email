@@ -53,6 +53,8 @@ module Data.IMF.Syntax
   , CharParsing(..)
   , SM
 
+  , vcharUtf8
+
   -- ** Helpers for building parsers
   , isAtext
   , isQtext
@@ -145,6 +147,30 @@ isVchar c =
 
 vchar :: CharParsing f s a => (f s) a
 vchar = satisfy isVchar
+
+vcharUtf8 :: AT.Parser B.ByteString [Word8]
+vcharUtf8 =
+  pure <$> satisfy isVchar
+  <|> utf8NonAscii
+
+-- | Parse a multi-byte UTF-8 character, returning the list of
+-- bytes.
+utf8NonAscii :: A.Parser [Word8]
+utf8NonAscii =
+  list2 <$> fromTo 0xC2 0xDF <*> utf8_tail
+  <|> list3 <$> A.word8 0xE0 <*> fromTo 0xA0 0xBF <*> utf8_tail
+  <|> list3 <$> fromTo 0xE1 0xEC <*> utf8_tail <*> utf8_tail
+  <|> list3 <$> A.word8 0xED <*> fromTo 0x80 0x9F <*> utf8_tail
+  <|> list3 <$> fromTo 0xEE 0xEF <*> utf8_tail <*> utf8_tail
+  <|> list4 <$> A.word8 0xF0 <*> fromTo 0x90 0xBF <*> utf8_tail <*> utf8_tail
+  <|> list4 <$> fromTo 0xF1 0xF3 <*> utf8_tail <*> utf8_tail <*> utf8_tail
+  <|> list4 <$> fromTo 0xF1 0xF3 <*> utf8_tail <*> utf8_tail <*> utf8_tail
+  where
+    fromTo lo hi = A.satisfy (\c -> c >= lo && c <= hi)
+    utf8_tail = fromTo 0x80 0xBF
+    list2 c1 c2 = [c1, c2]
+    list3 c1 c2 c3 = [c1, c2, c3]
+    list4 c1 c2 c3 c4 = [c1, c2, c3, c4]
 
 dquote :: CharParsing f s a => (f s) a
 dquote = char '"'
