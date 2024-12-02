@@ -48,6 +48,7 @@ module Data.MIME
   -- ** MIME data type
     MIME(..)
   , mime
+  , mime'
   , MIMEMessage
 
   , WireEntity
