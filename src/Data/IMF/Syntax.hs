@@ -43,6 +43,7 @@ module Data.IMF.Syntax
   , crlf
   , vchar
   , word
+  , dquote
   , quotedString
   , dotAtomText
   , dotAtom

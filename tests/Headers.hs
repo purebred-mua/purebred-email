@@ -23,6 +23,7 @@ import Data.List.NonEmpty (NonEmpty((:|)))
 import Data.String (IsString)
 import Data.Word (Word8)
 
+import qualified Data.Text as T
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Lazy as L
 import qualified Data.ByteString.Lazy.Char8 as L8
@@ -47,6 +48,7 @@ renderField = Builder.toLazyByteString . buildField
 unittests :: TestTree
 unittests = testGroup "Headers"
   [ parsesMailboxesSuccessfully
+  , parsesMailboxesNonASCIISuccessfully
   , parsesTextMailboxesSuccessfully
   , parsesAddressesSuccessfully
   , parsesTextAddressesSuccessfully
@@ -136,6 +138,26 @@ rendersAddressesToTextSuccessfully =
         , "undisclosed-recipients:;")
       ]
 
+nonASCIIDisplayNameFixtures :: IsString s => [(String, Either String Mailbox -> Assertion, s)]
+nonASCIIDisplayNameFixtures =
+  [
+    ( "Czech"
+    , (Right (Mailbox (Just "Lud\283k Tiberiu") (AddrSpec "foo" (DomainDotAtom $ "bar" :| ["test"]))) @=?)
+    , "Luděk Tiberiu")
+  , ( "Chinese"
+   , (Right (Mailbox (Just "佐藤 直樹") (AddrSpec "foo" (DomainDotAtom  $ "bar" :| ["test"]))) @=?)
+   , "佐藤 直樹")
+  , ("Japanese"
+    ,(Right (Mailbox (Just "鈴木 一郎") (AddrSpec "foo" (DomainDotAtom  $ "bar" :| ["test"]))) @=?)
+    , "鈴木 一郎")
+  , ("Korean"
+    , (Right (Mailbox (Just "김철수") (AddrSpec "foo" (DomainDotAtom  $ "bar" :| ["test"]))) @=?)
+    , "김철수")
+  , ("Apostrophy"
+    , (Right (Mailbox (Just "O'Neill Mc Carthy") (AddrSpec "foo" (DomainDotAtom  $ "bar" :| ["test"]))) @=?)
+    , "O'Neill Mc Carthy")
+  ]
+
 -- | Note some examples are taken from https://tools.ietf.org/html/rfc3696#section-3
 mailboxFixtures :: IsString s => [(String, Either String Mailbox -> Assertion, s)]
 mailboxFixtures =
@@ -176,21 +198,29 @@ mailboxFixtures =
       , assertBool "Parse error expected" . isLeft
       , "foo@,bar,com")
     , ( "displayName without quotes but with spaces"
-      , (Right (Mailbox (Just "John Doe") (AddrSpec "jdoe" (DomainDotAtom $ "machine" :| ["example"]))) @=?)
-      , "John Doe <jdoe@machine.example>"
+      , (Right (Mailbox (Just "John. (Doe)") (AddrSpec "jdoe" (DomainDotAtom $ "machine" :| ["example"]))) @=?)
+      , "\"John. (Doe)\" <jdoe@machine.example>"
       )
     ]
 
 parsesMailboxesSuccessfully :: TestTree
 parsesMailboxesSuccessfully =
-    testGroup "parsing mailboxes" $
+    testGroup "parsing mailboxes (text)" $
     (\(desc,f,input) ->
           testCase desc $ f (AText.parseOnly AddressText.mailbox input)) <$>
     mailboxFixtures
 
+parsesMailboxesNonASCIISuccessfully :: TestTree
+parsesMailboxesNonASCIISuccessfully =
+  testGroup "parsing mailboxes (nonASCII)" $
+  (\(desc, assertion, input) ->
+     testCase desc $ assertion (AText.parseOnly AddressText.mailbox (input <> " <foo@bar.test>"))) <$>
+  nonASCIIDisplayNameFixtures
+
+
 parsesTextMailboxesSuccessfully :: TestTree
 parsesTextMailboxesSuccessfully =
-    testGroup "parsing mailboxes (text)" $
+    testGroup "parsing mailboxes" $
     (\(desc,f,input) ->
           testCase desc $ f (parseOnly (mailbox defaultCharsets) input)) <$>
     mailboxFixtures

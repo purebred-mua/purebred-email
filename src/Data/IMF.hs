@@ -150,6 +150,7 @@ module Data.IMF
   , Address(..)
   , address
   , addressList
+  , addressSpec
   , AddrSpec(..)
   , Domain(..)
   , Mailbox(..)

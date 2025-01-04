@@ -39,6 +39,7 @@ import Control.Applicative ((<|>), optional)
 import Data.CaseInsensitive
 import Data.Foldable (fold)
 import Data.List (intersperse)
+import Data.Char (isLetter)
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
 import qualified Data.Text.Lazy as LT
@@ -49,7 +50,7 @@ import Data.List.NonEmpty (intersperse)
 
 import Data.MIME.Charset (decodeLenient)
 import Data.IMF (Mailbox(..), Address(..), AddrSpec(..), Domain(..))
-import Data.IMF.Syntax
+import Data.IMF.Syntax hiding (word)
 
 
 renderMailboxes :: [Mailbox] -> T.Text
@@ -99,6 +100,11 @@ mailbox = Mailbox <$> optional displayName <*> angleAddr
 readMailbox :: String -> Either String Mailbox
 readMailbox = parseOnly (mailbox <* endOfInput) . T.pack
 
+word :: Parser T.Text
+word = optionalFWS *> foldMany1 (singleton . toChar <$> A.satisfy classes)
+  where
+    classes c = isLetter c || isAtext c
+
 -- | Version of 'phrase' that does not process encoded-word
 -- (we are parsing Text so will assume that the input does not
 -- contain encoded words.  TODO this is probably wrong :)
@@ -106,7 +112,7 @@ phrase :: Parser T.Text
 phrase = foldMany1Sep (singleton ' ') word
 
 displayName :: Parser T.Text
-displayName = phrase
+displayName = phrase <|> quotedString
 
 mailboxList :: Parser [Mailbox]
 mailboxList = mailbox `sepBy` char ','
