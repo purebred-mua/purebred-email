@@ -23,6 +23,7 @@ import Data.List.NonEmpty (NonEmpty((:|)))
 import Data.String (IsString)
 import Data.Word (Word8)
 
+import qualified Data.Text as T
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Lazy as L
 import qualified Data.ByteString.Lazy.Char8 as L8
@@ -47,6 +48,7 @@ renderField = Builder.toLazyByteString . buildField
 unittests :: TestTree
 unittests = testGroup "Headers"
   [ parsesMailboxesSuccessfully
+  , parsesMailboxesNonASCIISuccessfully
   , parsesTextMailboxesSuccessfully
   , parsesAddressesSuccessfully
   , parsesTextAddressesSuccessfully
@@ -176,21 +178,56 @@ mailboxFixtures =
       , assertBool "Parse error expected" . isLeft
       , "foo@,bar,com")
     , ( "displayName without quotes but with spaces"
-      , (Right (Mailbox (Just "John Doe") (AddrSpec "jdoe" (DomainDotAtom $ "machine" :| ["example"]))) @=?)
-      , "John Doe <jdoe@machine.example>"
+      , (Right (Mailbox (Just "John. (Doe)") (AddrSpec "jdoe" (DomainDotAtom $ "machine" :| ["example"]))) @=?)
+      , "\"John. (Doe)\" <jdoe@machine.example>"
       )
     ]
 
 parsesMailboxesSuccessfully :: TestTree
 parsesMailboxesSuccessfully =
-    testGroup "parsing mailboxes" $
+    testGroup "parsing mailboxes (text)" $
     (\(desc,f,input) ->
           testCase desc $ f (AText.parseOnly AddressText.mailbox input)) <$>
     mailboxFixtures
 
+nonASCIIDisplayNameFixtures :: [(String, T.Text, T.Text)]
+nonASCIIDisplayNameFixtures =
+  [ ( "Czech (bare)"
+    , "Luděk Tiberiu"
+    , "Luděk Tiberiu" )
+  , ( "Czech (quoted-string)"
+    , "Luděk Tiberiu"
+    , "\"Luděk Tiberiu\"" )
+  , ( "Czech (quoted-string with quoted-pair)"
+    , "Luděk Tiberiu"
+    , "\"Lud\\ěk Tiberiu\"" )
+  , ( "Chinese"
+    , "佐藤 直樹"
+    , "佐藤 直樹" )
+  , ("Japanese"
+    , "鈴木 一郎"
+    , "鈴木 一郎" )
+  , ("Korean"
+    , "김철수"
+    , "김철수" )
+  , ("Apostrophe"
+    , "O'Neill Mc Carthy"
+    , "O'Neill Mc Carthy" )
+  ]
+
+parsesMailboxesNonASCIISuccessfully :: TestTree
+parsesMailboxesNonASCIISuccessfully =
+  testGroup "parsing mailboxes (non-ASCII)" $
+  (\(desc, expect, input) ->
+     testCase desc $ Right (Mailbox (Just expect) addrSpecCommon) @=? AText.parseOnly AddressText.mailbox (input <> " <foo@bar.test>")) <$>
+  nonASCIIDisplayNameFixtures
+  where
+    addrSpecCommon = AddrSpec "foo" (DomainDotAtom $ "bar" :| ["test"])
+
+
 parsesTextMailboxesSuccessfully :: TestTree
 parsesTextMailboxesSuccessfully =
-    testGroup "parsing mailboxes (text)" $
+    testGroup "parsing mailboxes" $
     (\(desc,f,input) ->
           testCase desc $ f (parseOnly (mailbox defaultCharsets) input)) <$>
     mailboxFixtures

@@ -49,7 +49,7 @@ import Data.List.NonEmpty (intersperse)
 
 import Data.MIME.Charset (decodeLenient)
 import Data.IMF (Mailbox(..), Address(..), AddrSpec(..), Domain(..))
-import Data.IMF.Syntax
+import Data.IMF.Syntax hiding (quotedString, word)
 
 
 renderMailboxes :: [Mailbox] -> T.Text
@@ -98,6 +98,28 @@ mailbox = Mailbox <$> optional displayName <*> angleAddr
 -- | Parse a (whole) string, returning an error @String@ or a 'Mailbox'.
 readMailbox :: String -> Either String Mailbox
 readMailbox = parseOnly (mailbox <* endOfInput) . T.pack
+
+isUtf8NonAscii :: Char -> Bool
+isUtf8NonAscii = (> '\127')
+
+quotedString :: Parser T.Text
+quotedString =
+  optionalCFWS *> dquote
+  *> foldMany (optionalFWS <<>> qcontent) <<>> optionalFWS
+  <* dquote <* optionalCFWS
+  where
+    qcontent =
+      T.singleton <$> A.satisfy (\c -> isQtext c || isUtf8NonAscii c)
+      <|> T.singleton <$> quotedPair
+
+quotedPair :: Parser Char
+quotedPair = char '\\' *> (vchar <|> A.satisfy isUtf8NonAscii <|> wsp)
+
+atom :: Parser T.Text
+atom = optionalCFWS *> A.takeWhile1 (\c -> isAtext c || isUtf8NonAscii c) <* optionalCFWS
+
+word :: Parser T.Text
+word = atom <|> quotedString
 
 -- | Version of 'phrase' that does not process encoded-word
 -- (we are parsing Text so will assume that the input does not
