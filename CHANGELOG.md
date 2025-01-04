@@ -1,9 +1,14 @@
 ## Next
 
-- Support UTF-8 in `Subject` and other unstructured headers.
-  ([#82])
+- Support non-ASCII UTF-8 in `Subject` and other unstructured
+  headers.  ([#82])
+
+- Support non-ASCII UTF-8 in display name in the `Data.IMF.Text`
+  parser (the `ByteString` parser still only supports non-ASCII
+  input via encoded-word).  ([#87])
 
 [#82]: https://github.com/purebred-mua/purebred-email/issues/82
+[#87]: https://github.com/purebred-mua/purebred-email/issues/87
 
 
 ## Version 0.6 (2022-09-13)
