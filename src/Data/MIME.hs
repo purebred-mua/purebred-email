@@ -87,6 +87,7 @@ module Data.MIME
   -- *** Content-Type values
   , contentTypeTextPlain
   , contentTypeApplicationOctetStream
+  , contentTypeMultipart
   , contentTypeMultipartMixed
   , defaultContentType
 

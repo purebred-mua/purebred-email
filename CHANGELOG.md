@@ -7,6 +7,10 @@
   parser (the `ByteString` parser still only supports non-ASCII
   input via encoded-word).  ([#87])
 
+- Export `contentTypeMultipart` so that users can create all kinds
+  of multipart messages. ([#81])
+
+[#81]: https://github.com/purebred-mua/purebred-email/issues/81
 [#82]: https://github.com/purebred-mua/purebred-email/issues/82
 [#87]: https://github.com/purebred-mua/purebred-email/issues/87
 
