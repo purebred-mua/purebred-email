@@ -14,14 +14,9 @@
 -- You should have received a copy of the GNU Affero General Public License
 -- along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-{-# LANGUAGE BangPatterns #-}
-{-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE DeriveAnyClass #-}
-{-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE DerivingStrategies #-}
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE RankNTypes #-}
-{-# LANGUAGE TupleSections #-}
 {-# LANGUAGE TypeFamilies #-}
 
 {- |
@@ -85,7 +80,8 @@ type RawParameters = [(CI B.ByteString, B.ByteString)]
 -- and optional charset and language information (RFC 2231).
 --
 newtype Parameters = Parameters [(CI B.ByteString, B.ByteString)]
-  deriving (Eq, Show, Generic, NFData)
+  deriving (Eq, Show, Generic)
+  deriving anyclass (NFData)
 
 instance Semigroup Parameters where
   Parameters a <> Parameters b = Parameters (a <> b)

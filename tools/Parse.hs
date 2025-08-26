@@ -20,10 +20,10 @@ main = do
   traverse_ parseMail (fileFilter files)
 
 parseMail :: FilePath -> IO ()
-parseMail filename = do
-  msgData <- B.readFile filename
+parseMail path = do
+  msgData <- B.readFile path
   case parse (message mime) msgData of
-    Left e -> putStrLn (filename <> " (" <> e <> ") " <> analyse msgData)
+    Left e -> putStrLn (path <> " (" <> e <> ") " <> analyse msgData)
     Right _ -> pure ()
 
 analyse :: B.ByteString -> String

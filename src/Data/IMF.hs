@@ -14,16 +14,10 @@
 -- You should have received a copy of the GNU Affero General Public License
 -- along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-{-# LANGUAGE AllowAmbiguousTypes #-}
 {-# LANGUAGE DefaultSignatures #-}
 {-# LANGUAGE DeriveAnyClass #-}
-{-# LANGUAGE DeriveGeneric #-}
-{-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE DerivingStrategies #-}
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE RankNTypes #-}
-{-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE TupleSections #-}
 {-# LANGUAGE TypeFamilies #-}
 
 {- |
@@ -223,7 +217,8 @@ import Data.MIME.TransferEncoding (transferEncode)
 
 type Header = (CI B.ByteString, B.ByteString)
 newtype Headers = Headers [Header]
-  deriving (Eq, Show, Generic, NFData)
+  deriving (Eq, Show, Generic)
+  deriving anyclass (NFData)
 
 class HasHeaders a where
   headers :: Lens' a Headers
@@ -682,10 +677,10 @@ replyReferences msg
   inRep = view headerInReplyTo msg
 
 replySubject :: CharsetLookup -> Message ctx a -> T.Text
-replySubject charsets msg = if prefixed then orig else "Re: " <> orig
+replySubject charsets msg = if hasPrefix then orig else "Re: " <> orig
   where
   orig = fold $ view (headerSubject charsets) msg
-  prefixed = mk (T.take 3 orig) == "Re:"
+  hasPrefix = mk (T.take 3 orig) == "Re:"
 
 
 -- | Construct a reply to a 'Message', according to the specified

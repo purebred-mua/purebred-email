@@ -34,7 +34,7 @@ module Data.MIME.EncodedWord
   , chooseEncodedWordEncoding
   ) where
 
-import Control.Applicative ((<|>), liftA2, optional)
+import Control.Applicative ((<|>), optional)
 import Data.Maybe (fromMaybe)
 import Data.Monoid (Sum(Sum), Any(Any))
 

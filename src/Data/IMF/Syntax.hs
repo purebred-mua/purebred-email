@@ -14,11 +14,8 @@
 -- You should have received a copy of the GNU Affero General Public License
 -- along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-{-# LANGUAGE ConstraintKinds #-}
-{-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE FunctionalDependencies #-}
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE ScopedTypeVariables #-}
 
 {- |
 
@@ -79,7 +76,7 @@ module Data.IMF.Syntax
   ) where
 
 import Prelude hiding (takeWhile)
-import Control.Applicative ((<|>), Alternative, liftA2, many, optional, some)
+import Control.Applicative ((<|>), Alternative, many, optional, some)
 import Control.Monad (void)
 import qualified Data.Attoparsec.ByteString as A
 import qualified Data.Attoparsec.Internal as A

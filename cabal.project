@@ -1,0 +1,8 @@
+-- match haskell-ci settings
+package purebred-email
+  ghc-options:
+    -Werror=missing-methods
+    -Werror=missing-fields
+    -Werror=incomplete-uni-patterns
+    -Werror=incomplete-patterns
+    -Werror=unused-packages
