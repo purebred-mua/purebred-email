@@ -1,4 +1,5 @@
 -- match haskell-ci settings
+packages: .
 package purebred-email
   ghc-options:
     -Werror=missing-methods
