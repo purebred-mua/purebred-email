@@ -113,6 +113,7 @@ module Data.IMF
 
   -- ** Originator
   , headerFrom
+  , headerAuthor
   , headerReplyTo
 
   -- ** Destination Address
@@ -508,6 +509,26 @@ headerReplyTo = headerAddressList "Reply-To"
 headerTo = headerAddressList "To"
 headerCC = headerAddressList "Cc"
 headerBCC = headerAddressList "Bcc"
+
+-- | @Author:@ field (<https://tools.ietf.org/html/rfc9057 RFC 9057>).
+--
+-- Rules for this field:
+--
+-- * If an Author: field already exists, a new one MUST NOT be
+--   created, and the existing one MUST NOT be modified.
+-- * An author's MUA or MSA MAY create an Author: field, and its
+--   value MUST be identical to the value in the From: field.
+-- * A Mediator MAY create an Author: field if one does not already
+--   exist, and this new field's value MUST be identical to the value
+--   of the From: field at the time the Mediator received the message
+--   (and before the Mediator causes any changes to the From: field).
+--
+-- This implementation follows RFC 6854 in allowing group syntax
+-- (RFC 9057 defines a more strict syntax, which is incompatible
+-- with RFC 6854).
+--
+headerAuthor :: (HasHeaders a) => CharsetLookup -> Lens' a [Address]
+headerAuthor = headerAddressList "Author"
 
 data MessageID = MessageID
   (NonEmpty B.ByteString)

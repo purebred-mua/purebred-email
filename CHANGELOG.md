@@ -10,6 +10,10 @@
 - Export `contentTypeMultipart` so that users can create all kinds
   of multipart messages. ([#81])
 
+- Add `headerAuthor`, for and reading the `Author:` header field
+  defined in [RFC 9057]. ([#77])
+
+[#77]: https://github.com/purebred-mua/purebred-email/issues/77
 [#81]: https://github.com/purebred-mua/purebred-email/issues/81
 [#82]: https://github.com/purebred-mua/purebred-email/issues/82
 [#87]: https://github.com/purebred-mua/purebred-email/issues/87

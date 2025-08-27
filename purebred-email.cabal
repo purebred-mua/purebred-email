@@ -23,6 +23,7 @@ description:
   - MIME parameter value and encoded word extensions (<https://tools.ietf.org/html/rfc2231 RFC 2231>)
   - @Content-Disposition@ header field (<https://tools.ietf.org/html/rfc2183 RFC 2183>)
   - Address syntax in @From@ and @Sender@ fields (<https://tools.ietf.org/html/rfc6854 RFC 6854>)
+  - @Author@ header field (<https://tools.ietf.org/html/rfc9057 RFC 9057>)
 
 license:             AGPL-3.0-or-later
 license-file:        LICENSE
