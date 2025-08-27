@@ -222,12 +222,12 @@ newParameter = charsetEncode . ParameterValue Nothing Nothing . view recons
 
 
 -- | The default charset @us-ascii@ is implied by the abstract of
--- RFC 2231 which states: /This memo defines … a means to specify
--- parameter values in character sets other than US-ASCII/.
+-- RFC 2231 which states: /This memo defines … a means to specify/
+-- /parameter values in character sets other than US-ASCII/.
 --
--- When encoding, 'utf-8' is always used, but if the whole string
--- contains only ASCII characters then the charset declaration is
--- omitted (so that it can be encoded as a non-extended parameter).
+-- Always encodes values in @utf-8@, but omits the @charset@
+-- declaration when the string contains only ASCII characters
+-- (so that it can be encoded as a non-extended parameter).
 --
 instance HasCharset EncodedParameterValue where
   type Decoded EncodedParameterValue = DecodedParameterValue

@@ -672,6 +672,9 @@ token =
 --   Decoding RTF is outside the scope of this library.
 --   See <https://www.iana.org/assignments/media-types/text/rtf>.
 --
+-- For encoding, uses @us-ascii@ if the body is entierly ASCII
+-- otherwise @utf-8@, and sets the @charset@ parameter accordingly.
+--
 instance HasCharset ByteEntity where
   type Decoded ByteEntity = TextEntity
   charsetName = to $ \ent ->
@@ -690,12 +693,6 @@ instance HasCharset ByteEntity where
   charsetData = body
   charsetDecoded m = to $ \a -> (\t -> set body t a) <$> view (charsetText m) a
 
-  -- | Encode (@utf-8@) and add/set charset parameter.  If consisting
-  -- entirely of ASCII characters, the @charset@ parameter gets set to
-  -- @us-ascii@ instead of @utf-8@.
-  --
-  -- Ignores Content-Type (which is not correct for all content types).
-  --
   charsetEncode (Message h a) =
     let
       b = T.encodeUtf8 a

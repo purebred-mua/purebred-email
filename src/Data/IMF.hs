@@ -740,7 +740,7 @@ reply charsets settings msg =
     getAddrSpec :: Mailbox -> AddrSpec
     getAddrSpec (Mailbox _ addr) = addr
 
-    -- | Find a mailbox matching the given address.  If no match is
+    -- Find a mailbox matching the given address.  If no match is
     -- found, return @Nothing@.  If match is found, return the value
     -- from the candidates collection if 'ReplyFromRewriteOn',
     -- otherwise return the input value.
