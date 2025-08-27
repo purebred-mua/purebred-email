@@ -1,0 +1,18 @@
+MIME-Version: 1.0
+Content-Type: multipart/mixed; boundary="------------VGV4VA5ahWZIEkhxyIbpi2vp"
+To: test@example.com
+From: test@example.com
+Subject: Test
+
+This is a multi-part message in MIME format.
+--------------VGV4VA5ahWZIEkhxyIbpi2vp
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 7bit
+
+--------------VGV4VA5ahWZIEkhxyIbpi2vp
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 7bit
+
+Hello World
+
+--------------VGV4VA5ahWZIEkhxyIbpi2vp--

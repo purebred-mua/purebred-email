@@ -13,10 +13,16 @@
 - Add `headerAuthor`, for and reading the `Author:` header field
   defined in [RFC 9057]. ([#77])
 
+- Add support for parsing MIME subparts without bodies.  The new
+  `entities'` traversal visits all parts, projecting `Just body`
+  where there is a body otherwise `Nothing`.  The `MIME` data type
+  gets the new `PartNoBody` constructor.  ([#90])
+
 [#77]: https://github.com/purebred-mua/purebred-email/issues/77
 [#81]: https://github.com/purebred-mua/purebred-email/issues/81
 [#82]: https://github.com/purebred-mua/purebred-email/issues/82
 [#87]: https://github.com/purebred-mua/purebred-email/issues/87
+[#90]: https://github.com/purebred-mua/purebred-email/issues/90
 
 
 ## Version 0.6 (2022-09-13)

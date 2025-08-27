@@ -22,7 +22,6 @@
 module MIME where
 
 import Control.Exception (ErrorCall, evaluate, try)
-import Control.Monad ((<=<), void)
 import Data.Bifunctor (first)
 import Data.Char (toUpper)
 import Data.Either (isLeft)
@@ -35,7 +34,7 @@ import qualified Data.Text as T
 import Data.Time (ZonedTime(ZonedTime), timeZoneMinutes)
 
 import Test.Tasty (TestTree, testGroup)
-import Test.Tasty.HUnit ((@?=), Assertion, assertBool, assertFailure, testCase)
+import Test.Tasty.HUnit
 import Test.Tasty.QuickCheck
 import Test.QuickCheck.Instances ()
 
@@ -161,11 +160,22 @@ testParse :: TestTree
 testParse = testGroup "parsing tests"
   [ testCase "nested multipart" $
       testParseFile "test-vectors/nested-multipart.eml"
+  , testCase "multipart with an empty (no body) part" $
+      testParseFileAndAssert "test-vectors/multipart-no-body.eml" $ \msg ->
+        assertEqual "parsed the expected sub-entities"
+          [ Nothing, Just "Hello World\r\n" ]
+          ( toListOf (entities' . body) msg )
   ]
 
+testParseFileAndAssert :: FilePath -> (MIMEMessage -> Assertion) -> Assertion
+testParseFileAndAssert path go = do
+  input <- B.readFile path
+  case parse (message mime) input of
+    Left s    -> assertFailure s
+    Right msg -> go msg
+
 testParseFile :: FilePath -> Assertion
-testParseFile =
-  either assertFailure (void . pure) . parse (message mime) <=< B.readFile
+testParseFile path = testParseFileAndAssert path (const $ pure ())
 
 testParameterValueOverloadedStrings :: TestTree
 testParameterValueOverloadedStrings = testGroup "ParameterValue IsString instances"

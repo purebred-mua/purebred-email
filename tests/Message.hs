@@ -68,8 +68,12 @@ asciiText1, unicodeText1 :: Gen T.Text
 asciiText1 = Gen.text (Range.linear 1 100) printableAsciiChar
 unicodeText1 = Gen.text (Range.linear 1 100) printableUnicodeChar
 
-genTextPlain, genMultipart, genMessage :: Gen MIMEMessage
+genTextPlain, genMultipart, genNoBody, genMessage :: Gen MIMEMessage
+
 genTextPlain = createTextPlainMessage <$> Gen.choice [asciiText1, unicodeText1]
+
+genNoBody = pure $ set body PartNoBody $ createTextPlainMessage ""
+
 genMultipart = depths >>= go
   where
   -- Generate a 50 character multipart boundary.  These MUST be unique
@@ -81,8 +85,11 @@ genMultipart = depths >>= go
   go n = createMultipartMixedMessage
       <$> genBoundary
       <*> ( Gen.nonEmpty (Range.linear 1 10) $
-            -- 75% plain, 25% nested multipart
-            maybeAp encapsulate 5 $ Gen.frequency [(3, genTextPlain), (1, go (n - 1))]
+            maybeAp encapsulate 5 $ Gen.frequency
+              [ (70, genTextPlain)
+              , (10, genNoBody)
+              , (20, go (n - 1))
+              ]
           )
 
   -- max depth of 4
@@ -97,7 +104,12 @@ genMultipart = depths >>= go
   -- Apply the function to the generated value with probability 1-in-/n/.
   maybeAp f n g = Gen.frequency [(n - 1, g), (1, f <$> g)]
 
-genMessage = Gen.choice [ genTextPlain, genMultipart, encapsulate <$> genMessage ]
+genMessage = Gen.choice
+  [ genTextPlain
+  , genNoBody
+  , genMultipart
+  , encapsulate <$> genMessage
+  ]
 
 prop_messageRoundTrip :: Property
 prop_messageRoundTrip = property $ do
