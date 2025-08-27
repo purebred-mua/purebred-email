@@ -54,6 +54,7 @@ module Data.MIME
 
   -- *** Accessing and processing entities
   , entities
+  , entities'
   , attachments
   , isAttachment
   , transferDecoded
@@ -494,6 +495,7 @@ data MultipartSubtype
 --
 data MIME
   = Part B.ByteString
+  | PartNoBody
   | Encapsulated MIMEMessage
   | Multipart MultipartSubtype Boundary (NonEmpty MIMEMessage)
   | FailedParse MIMEParseError B.ByteString
@@ -506,16 +508,35 @@ instance EqMessage MIME where
     where
     stripVer = set (headers . at "MIME-Version") Nothing
 
--- | Get all leaf entities from the MIME message.
--- Entities that failed to parse are skipped.
+-- | Traverse all leaf entities in the MIME message.
+-- Skips parts without a body and parts that failed to parse.
+--
+-- Use 'entities'' to also traverse parts that do not have a body.
 --
 entities :: Traversal' MIMEMessage WireEntity
-entities f (Message h a) = case a of
+entities = entities' . l
+  where
+  l f (Message h mb) = case mb of
+    Nothing -> pure (Message h mb)
+    Just b  -> fmap Just <$> f (Message h b)
+
+-- | Traverse all leaf parts in the MIME message, projecting
+-- @Just body@ where there is a body and @Nothing@ where there is
+-- no body.  Skips parts that failed to parse.
+--
+-- Use 'entities' to traverse only the parts with bodies.
+--
+entities' :: Traversal' MIMEMessage (Message EncStateWire (Maybe B.ByteString))
+entities' f (Message h a) = case a of
   Part b ->
-    (\(Message h' b') -> Message h' (Part b')) <$> f (Message h b)
-  Encapsulated msg -> Message h . Encapsulated <$> entities f msg
+    (\(Message h' b') -> Message h' (maybe PartNoBody Part b'))
+    <$> f (Message h (Just b))
+  PartNoBody ->
+    (\(Message h' b') -> Message h' (maybe PartNoBody Part b'))
+    <$> f (Message h Nothing)
+  Encapsulated msg -> Message h . Encapsulated <$> entities' f msg
   Multipart sub b bs ->
-    Message h . Multipart sub b <$> traverse (entities f) bs
+    Message h . Multipart sub b <$> traverse (entities' f) bs
   FailedParse _ _ -> pure (Message h a)
 
 -- | Leaf entities with @Content-Disposition: attachment@
@@ -955,30 +976,54 @@ mimeBoundary = parameters . rawParameter "boundary"
 --
 mime :: Headers -> BodyHandler MIME
 mime h
-  | nullOf (header "MIME-Version") h = RequiredBody (Part <$> takeByteString)
-  | otherwise = mime' takeByteString h
+  | nullOf (header "MIME-Version") h = OptionalBody (Part <$> takeByteString, PartNoBody)
+  | otherwise = mime' Top h
 
 type instance MessageContext MIME = EncStateWire
 
+data MIMELevel = Top | Nest B.ByteString {- delimiter -}
+
 mime'
-  :: Parser B.ByteString
-  -- ^ Parser FOR A TAKE to the part delimiter.  If this part is
-  -- multipart, we pass it on to the 'multipart' parser.  If this
-  -- part is not multipart, we just do the take.
+  :: MIMELevel -- ^ current level of message
   -> Headers
   -> BodyHandler MIME
-mime' takeTillEnd h = RequiredBody $ case view contentType h of
-  ct | view ctType ct == "multipart" ->
+mime' level h = case view contentType h of
+  ct | view ctType ct == "multipart"
+     -> RequiredBody $
         case prepMultipart ct of
-          Left err              -> FailedParse err <$> takeTillEnd
+          Left err              -> FailedParse err <$> takeCRLF
           Right (sub, boundary) ->
-            Multipart sub boundary <$> multipart takeTillEnd boundary
-            <|> FailedParse MultipartParseFail <$> takeTillEnd
-     | matchContentType "message" (Just "rfc822") ct ->
-        (Encapsulated <$> message (mime' takeTillEnd))
-        <|> (FailedParse EncapsulatedMessageParseFail <$> takeTillEnd)
-  _ -> Part <$> takeTillEnd
+            Multipart sub boundary <$> multipart takeCRLF boundary
+            <|> FailedParse MultipartParseFail <$> takeCRLF
+     | matchContentType "message" (Just "rfc822") ct
+     -> RequiredBody $
+          Encapsulated <$> message (mime' level)
+          <|> FailedParse EncapsulatedMessageParseFail <$> takeCRLF
+  _ -> OptionalBody
+        ( case level of
+            Top ->
+              Part <$> takeByteString
+            Nest boundary ->
+              takeTillString boundary >>= \case
+                -- special case: we are already at the boundary!
+                -- this is not an empty body; it is NO BODY
+                "" -> pure PartNoBody
+                -- we took to the boundary, but need to trim the CRLF
+                s -> pure $ Part (trimCRLF s)
+
+        , PartNoBody
+        )
   where
+    trimCRLF s
+      | C8.takeEnd 2 s == "\r\n" = B.dropEnd 2 s
+      | C8.takeEnd 1 s ==   "\n" = B.dropEnd 1 s
+      | otherwise                =             s
+    trimCR s
+      | C8.takeEnd 1 s == "\r" = B.dropEnd 1 s
+      | otherwise              =             s
+    takeCRLF = case level of
+      Top -> takeByteString
+      Nest boundary -> trimCR <$> takeTillString ("\n" <> boundary)
     prepMultipart ct =
       (,) <$> parseSubtype ct <*> parseBoundary ct
     parseBoundary ct =
@@ -1031,13 +1076,8 @@ multipart takeTillEnd boundary =
   *> fmap fromList (part `sepBy1` crlf)
   <* string "--" <* takeTillEnd
   where
-    delimiter = "\n--" <> unBoundary boundary
-    dashBoundary = B.tail delimiter
-    part = message (mime' (trim <$> takeTillString delimiter))
-    trim s  -- trim trailing CR, because we only searched for LF
-      | B.null s = s
-      | C8.last s == '\r' = B.init s
-      | otherwise = s
+    dashBoundary = "--" <> unBoundary boundary
+    part = message (mime' (Nest dashBoundary))
 
 -- | Sets the @MIME-Version: 1.0@ header.
 --
@@ -1051,17 +1091,18 @@ instance RenderMessage MIME where
         Multipart sub boundary _  -> set contentType (contentTypeMultipart sub boundary)
         Encapsulated _msg         -> set contentType "message/rfc822"
         _                         -> id
-  buildBody _h z = Just $ case z of
-    Part partbody -> Builder.byteString partbody
-    Encapsulated msg -> buildMessage msg
-    Multipart _sub b xs ->
+  buildBody _h z = case z of
+    Part partbody       -> Just $ Builder.byteString partbody
+    PartNoBody          -> Nothing
+    Encapsulated msg    -> Just $ buildMessage msg
+    FailedParse _ bs    -> Just $ Builder.byteString bs
+    Multipart _sub b xs -> Just $
       let
         boundary = "--" <> Builder.byteString (unBoundary b)
       in
         boundary <> "\r\n"
         <> fold (intersperse ("\r\n" <> boundary <> "\r\n") (fmap buildMessage xs))
         <> "\r\n" <> boundary <> "--\r\n"
-    FailedParse _ bs -> Builder.byteString bs
 
 -- | Create a mixed `MIMEMessage` with an inline text/plain part and multiple
 -- `attachments`
